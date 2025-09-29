@@ -5,7 +5,16 @@ const { private } = require("./configs");
 
 const router = express.Router();
 
+const logs = (req) => {
+    return {
+        ok: req.method + " " + req.protocol + "://" + req.ip + " " + req.path + " okay :)",
+        err: req.method + " " + req.protocol + "://" + req.ip + " " + req.path + " not okay -_-",
+    }
+}
+
 router.get("/", (req, res) => {
+    console.log(logs(req).ok);
+
     return res.send("Hello, Rizo!");
 });
 
@@ -22,14 +31,21 @@ router.post("/login", (req, res) => {
 
             if (results.length) {
                 const token = jwt.sign({ username, password }, private);
+
+                console.log(logs(req).ok);
+                
                 return res.status(200).json({ message: "success", data: token });
             } else {
+                console.error(logs(req).err);
+                
                 return res.status(404).json({ message: "user was not found..." });
             }
 
         });
         
     } catch (error) {
+        console.error(logs(req).err);
+
         return res.status(500).json({ message: "server error" + error });
     }
 });
@@ -42,6 +58,8 @@ router.get("/get-user-data", (req, res) => {
 
         jwt.verify(token, private, (err, decoded) => {
             if (err) {
+                console.error(logs(req).err);
+                
                 return res.status(400).json({ message: err });
             }
             
@@ -50,6 +68,8 @@ router.get("/get-user-data", (req, res) => {
         });
 
         if (!username || !password) {
+            console.error(logs(req).err);            
+            
             return res.status(400).json({ message: "invalid token" });
         }
 
@@ -60,13 +80,19 @@ router.get("/get-user-data", (req, res) => {
             if (err) return res.status(500).json({ message: "DB error" + err });
 
             if (results.length) {
+                console.log(logs(req).ok);
+                
                 return res.status(200).json({ message: "success", data: results });
             } else {
+                console.error(logs(req).err);
+                
                 return res.status(404).json({ message: "user data was not found" });
             }
         });
 
     } catch (error) {
+        console.error(logs(req).err);        
+        
         return res.status(500).json({ message: "server error" + error });
     }
 });
@@ -79,13 +105,16 @@ router.post("/register", async (req, res) => {
         
         connection.query(sql, [firstName, lastName, username, password, groups], (err, results) => {
             if (err) console.log(err);
-            console.log(results);
 
+            console.log(logs(req).ok);
+            
             return res.status(200).json({message: "success", data: results});
         });
 
 
     } catch (err) {
+        console.error(logs(req).err);        
+        
         return res.status(500).json({message: "server error " + err});
     }
 
