@@ -34,7 +34,7 @@ router.post("/login", (req, res) => {
 
                 console.log(logs(req).ok);
                 
-                return res.status(200).json({ message: "success", data: token });
+                return res.status(200).json({ message: "success", token: token });
             } else {
                 console.error(logs(req).err);
                 
