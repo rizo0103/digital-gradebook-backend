@@ -30,7 +30,7 @@ router.post("/login", (req, res) => {
             if (err) return res.status(500).json({ message: "error occured" + err });
 
             if (results.length) {
-                const token = jwt.sign({ username, password }, private);
+                const token = jwt.sign({ username, password }, private, { expiresIn: "12h" });
 
                 console.log(logs(req).ok);
                 
