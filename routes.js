@@ -98,12 +98,12 @@ router.get("/get-user-data", (req, res) => {
 });
 
 router.post("/register", async (req, res) => {
-    const { firstName, lastName, username, password, groups } = await req.body;
+    const { english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups } = await req.body;
 
     try {
-        const sql = "INSERT INTO users (first_name, last_name, username, password, groups) VALUES (?, ?, ?, ?, ?)";
+        const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups) VALUES (?, ?, ?, ?, ?, ?, ?)";
         
-        connection.query(sql, [firstName, lastName, username, password, groups], (err, results) => {
+        connection.query(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups], (err, results) => {
             if (err) console.log(err);
 
             console.log(logs(req).ok);
