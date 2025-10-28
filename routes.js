@@ -140,4 +140,22 @@ router.post("/get-group-data", async(req, res) => {
     }
 });
 
+router.get("/get-all-groups", (req, res) => {
+    try {
+        const sql = "SELECT * FROM groups";
+
+        connection.query(sql, (err, results) => {
+            if (err) console.log(err);
+            
+            console.log(logs(req).ok);
+
+            return res.status(200).json({message: "success", data: results});
+        });
+    } catch (error) {
+        console.error(logs(req).err);
+
+        return res.status(500).json({ message: "server error" + error });
+    }
+});
+
 module.exports = router;
