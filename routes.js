@@ -124,7 +124,7 @@ router.post("/get-group-data", async(req, res) => {
     const { name } = await req.body;
     
     try {
-        const sql = "SELECT * FROM groups WHERE name = ? VALUE ?";
+        const sql = "SELECT * FROM groups WHERE name = ?";
 
         connection.query(sql, [name], (err, results) => {
             if (err) console.log(err);
