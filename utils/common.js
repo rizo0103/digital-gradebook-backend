@@ -25,4 +25,4 @@ const getUserFromToken = async (token, jwt, private, connection) => {
     }
 }
 
-module.exports = { logs };
+module.exports = { logs, getUserFromToken };
