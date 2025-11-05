@@ -5,11 +5,13 @@ const { private } = require("./configs");
 const { logs } = require('./utils/common');
 const authRouter = require('./routes/authRoutes');
 const userRouter = require('./routes/userRoutes');
+const groupRouter = require('./routes/groupRoutes');
 
 const router = express.Router();
 
 router.use(userRouter);
 router.use(authRouter);
+router.use(groupRouter);
 
 router.get("/", (req, res) => {
     console.log(logs(req).ok);
