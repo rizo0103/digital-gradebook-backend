@@ -4,9 +4,11 @@ const jwt = require("jsonwebtoken");
 const { private } = require("./configs");
 const { logs } = require('./utils/common');
 const authRouter = require('./routes/authRoutes');
+const userRouter = require('./routes/userRoutes');
 
 const router = express.Router();
 
+router.use(userRouter);
 router.use(authRouter);
 
 router.get("/", (req, res) => {
