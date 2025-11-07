@@ -47,6 +47,36 @@ userRouter.post("/create-group", async(req, res) => {
         console.error(logs(req).err);
     }
 
+    
+    const modifiedDays = days.map(day => {
+        let year = `${day}`.substring(0, 4),
+            month = `${day}`.substring(4, 6),
+            date = `${day}`.substring(6, 8);
+
+        return `${year}-${month}-${date}`;
+    }), months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    const finalDays = {};
+        
+    modifiedDays.map(day => {
+        let dateObj = new Date(day);
+        let year = dateObj.getFullYear();
+        let month = months[dateObj.getMonth()];
+
+        finalDays[year] = finalDays[year] || {};
+        finalDays[year][month] = finalDays[month] || [];
+    });
+
+        
+    modifiedDays.map(day => {
+        let dateObj = new Date(day);
+        let year = dateObj.getFullYear();
+        let month = months[dateObj.getMonth()];
+        let date = dateObj.getDate();
+        
+        finalDays[year][month].push(date);
+    });
+
     try {
         // verify token (throws if invalid)
         const user = await getUserFromToken(token, jwt, private, connection);
@@ -63,7 +93,7 @@ userRouter.post("/create-group", async(req, res) => {
 
         // create group
         const sql = "INSERT INTO groups (name, teacher, amount, days) VALUES (?, ?, ?, ?)";
-        const [result] = await connection.promise().query(sql, [name, teacher, amount, JSON.stringify(days)]);
+        const [result] = await connection.promise().query(sql, [name, teacher, amount, JSON.stringify(finalDays)]);
 
         console.log(logs(req).ok);
         return res.status(200).json({ message: "group created", data: result });
