@@ -7,12 +7,16 @@ const { logs, getUserFromToken } = require('../utils/common');
 const userRouter = express.Router();
 
 userRouter.post("/create-user", async(req, res) => {
-    const { username, password, fullname, groups, status } = req.body;
+    const { username, password, fullname_korean, fullname_english, groups, status } = req.body;
     const { token } = req.headers;
 
-    let english_first_name = "", english_last_name = "";
+    if (!username || !password || !fullname_korean || !fullname_english || !groups || !status) {
+        console.error(logs(req).err);
+        return res.status(400).json({ message: "missing fields" });
+    }
 
-    console.log(groups);
+    let english_first_name = fullname_english.split(" ")[0], english_last_name = fullname_english.split(" ")[1];
+    let korean_first_name = fullname_korean.split(" ")[0], korean_last_name = fullname_korean.split(" ")[1];
 
     try {
         // verify token
@@ -29,17 +33,10 @@ userRouter.post("/create-user", async(req, res) => {
             return res.status(403).json({ message: "forbidden" });
         }
 
-        if (fullname) {
-            const name = fullname.split(" ");
-            
-            first_name = name[0];
-            last_name = name[1] || "ㅂ";
-        }
-
         // create user
-        const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         
-        const [result] = await connection.promise().query(sql, [english_first_name, english_last_name, first_name, last_name, username, password, JSON.stringify(groups)]);
+        const [result] = await connection.promise().query(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, JSON.stringify(groups), status]);
 
         console.log(logs(req).ok);
 
