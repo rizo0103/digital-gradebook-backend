@@ -48,4 +48,37 @@ userRouter.post("/create-user", async(req, res) => {
     }
 });
 
+userRouter.get("/get-all-users", async (req, res) => {
+    const { token } = req.headers;
+
+    try {
+        // verify token
+        if (!token) {
+            console.error(logs(req).err, "TOKEN ERROR");
+            return res.status(401).json({ message: "unauthorized" });
+        }
+
+        // verify admin status
+        const user = await getUserFromToken(token, jwt, private, connection);
+
+        if (user.status !== "admin") {
+            console.error(logs(req).err, "STATUS ERROR");
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const sql = "SELECT * FROM users WHERE status = 'teacher'";
+        const [results] = await connection.promise().query(sql);
+
+        const filteredResults = results.map(user => ({ username: user.username }));
+
+        console.log(logs(req).ok);
+        return res.status(200).json({ message: "success", data: filteredResults });
+
+    } catch (error) {
+        console.error(logs(req).err, "SERVER ERROR");
+
+        return res.status(500).json({ message: "server error " + error });
+    }
+});
+
 module.exports = userRouter;
