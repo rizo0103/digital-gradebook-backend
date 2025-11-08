@@ -3,11 +3,10 @@ const connection = require('../db');
 const jwt = require("jsonwebtoken");
 const { private } = require("../configs");
 const { logs, getUserFromToken } = require('../utils/common');
-const userRouter = require('./userRoutes');
 
 const groupRouter = express.Router();
 
-userRouter.get("/get-timeslots", async(req, res) => {
+groupRouter.get("/get-timeslots", async(req, res) => {
     const { token } = req.headers;
 
     try {
@@ -39,7 +38,7 @@ userRouter.get("/get-timeslots", async(req, res) => {
     }
 });
 
-userRouter.post("/create-group", async(req, res) => {
+groupRouter.post("/create-group", async(req, res) => {
     const { name, amount, days } = await req.body; 
     const { token } = req.headers;
 
@@ -105,7 +104,7 @@ userRouter.post("/create-group", async(req, res) => {
 
 });
 
-userRouter.get("/get-groups", async (req, res) => {
+groupRouter.get("/get-groups", async (req, res) => {
     const { token } = req.headers;
 
     try {
