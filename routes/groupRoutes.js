@@ -137,4 +137,37 @@ groupRouter.get("/get-groups", async (req, res) => {
     }
 });
 
+groupRouter.get("/get-all-groups", async (req, res) => {
+    const { token } = req.headers;
+
+    try {
+        // verify token (throws if invalid)
+
+        const user = await getUserFromToken(token, jwt, private, connection);
+
+        if (!user) {
+            console.error(logs(req).err);
+
+            return res.status(401).json({ message: "unauthorized" });
+        }
+
+        if (user.status !== "admin") {
+            console.error(logs(req).err);
+
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const sql = "SELECT * FROM groups";
+        const [results] = await connection.promise().query(sql);
+
+        console.log(logs(req).ok);
+
+        return res.status(200).json({ message: "success", data: results });
+    } catch (error) {
+        console.error(logs(req).err);
+
+        return res.status(500).json({ message: "server error " + error });
+    }
+});
+
 module.exports = groupRouter;
