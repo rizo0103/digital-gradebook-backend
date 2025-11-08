@@ -40,7 +40,7 @@ userRouter.get("/get-timeslots", async(req, res) => {
 });
 
 userRouter.post("/create-group", async(req, res) => {
-    const { name, teacher, amount, days } = await req.body; 
+    const { name, amount, days } = await req.body; 
     const { token } = req.headers;
 
     if (!token) {
@@ -92,8 +92,8 @@ userRouter.post("/create-group", async(req, res) => {
         }
 
         // create group
-        const sql = "INSERT INTO groups (name, teacher, amount, days) VALUES (?, ?, ?, ?)";
-        const [result] = await connection.promise().query(sql, [name, teacher, amount, JSON.stringify(finalDays)]);
+        const sql = "INSERT INTO groups (name, amount, days) VALUES ( ?, ?, ?)";
+        const [result] = await connection.promise().query(sql, [name, amount, JSON.stringify(finalDays)]);
 
         console.log(logs(req).ok);
         return res.status(200).json({ message: "group created", data: result });
