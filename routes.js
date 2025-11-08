@@ -19,53 +19,6 @@ router.get("/", (req, res) => {
     return res.send("Hello, Rizo!");
 });
 
-router.get("/get-user-data", (req, res) => {
-    const { token } = req.headers;
-
-    try {
-        let username = "", password = "";
-
-        jwt.verify(token, private, (err, decoded) => {
-            if (err) {
-                console.error(logs(req).err);
-                
-                return res.status(400).json({ message: err });
-            }
-            
-            username = decoded.username;
-            password = decoded.password;
-        });
-
-        if (!username || !password) {
-            console.error(logs(req).err);            
-            
-            return res.status(400).json({ message: "invalid token" });
-        }
-
-        const sql = `SELECT * FROM users WHERE username = ? AND password = ?`;
-        const filter = [username, password];
-        
-        connection.query(sql, filter, (err, results) => {
-            if (err) return res.status(500).json({ message: "DB error" + err });
-
-            if (results.length) {
-                console.log(logs(req).ok);
-                
-                return res.status(200).json({ message: "success", data: results });
-            } else {
-                console.error(logs(req).err);
-                
-                return res.status(404).json({ message: "user data was not found" });
-            }
-        });
-
-    } catch (error) {
-        console.error(logs(req).err);        
-        
-        return res.status(500).json({ message: "server error" + error });
-    }
-});
-
 router.post("/get-group-data", async(req, res) => {
     const { name } = await req.body;
     
