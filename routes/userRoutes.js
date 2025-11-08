@@ -81,4 +81,62 @@ userRouter.get("/get-all-users", async (req, res) => {
     }
 });
 
+userRouter.get("/get-user-data", async (req, res) => {
+    const { token } = req.headers;
+
+    try {
+        // verify token
+        const user = await getUserFromToken(token, jwt, private, connection);
+        if (!user) {
+            console.error(logs(req).err);
+            return res.status(401).json({ message: "unauthorized" });
+        }
+
+        console.log(logs(req).ok);
+        
+        return res.status(200).json({ message: "success", data: user });
+    } catch (error) {
+        console.error(logs(req).err);
+        
+        return res.status(500).json({ message: "server error " + error });
+    }
+});
+
+userRouter.get("/get-user-data/:username", async (req, res) => {
+    const { username } = req.params;
+    const { token } = req.headers;
+
+    try {
+        // verify token
+        const requestingUser = await getUserFromToken(token, jwt, private, connection);
+        
+        if (!requestingUser) {
+            console.error(logs(req).err);
+            return res.status(401).json({ message: "unauthorized" });
+        }
+        
+        // verify admin status
+        if (requestingUser.status !== "admin") {
+            console.error(logs(req).err);
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const sql = "SELECT * FROM users WHERE username = ?";
+        const [results] = await connection.promise().query(sql, [username]);
+
+        if (results.length === 0) {
+            console.error(logs(req).err);
+            return res.status(404).json({ message: "user not found" });
+        }
+        
+        console.log(logs(req).ok);
+
+        return res.status(200).json({ message: "success", data: results[0] });
+    } catch (error) {
+        console.error(logs(req).err);
+        
+        return res.status(500).json({ message: "server error " + error });
+    }
+});
+
 module.exports = userRouter;
