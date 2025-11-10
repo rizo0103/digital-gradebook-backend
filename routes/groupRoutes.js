@@ -46,6 +46,7 @@ groupRouter.post("/create-group", async(req, res) => {
         console.error(logs(req).err);
     }
     
+    days.sort((a, b) => a - b);
     let finalDays = modifyDays(days);
 
     try {
@@ -89,16 +90,23 @@ groupRouter.get("/get-groups", async (req, res) => {
             return res.status(401).json({ message: "unauthorized" });
         }
         
-        // verify admin status
-        if (user.status !== "admin") {
+        // verify admin or teacher status
+        if (user.status !== "admin" && user.status !== "teacher") {
             console.error(logs(req).err);
          
             return res.status(403).json({ message: "forbidden" });
         }
 
         // get groups
-        const sql = "SELECT * FROM groups";
-        const [results] = await connection.promise().query(sql);
+        let sql = "SELECT * FROM groups",
+            filter = [];
+
+        if (user.status === "teacher") {
+            sql = "SELECT * FROM groups WHERE teacher = ?";
+            filter.push(user.username);
+        }
+
+        const [results] = await connection.promise().query(sql, filter);
 
         console.log(logs(req).ok);
         return res.status(200).json({ message: "success", data: results });

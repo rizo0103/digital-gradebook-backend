@@ -55,7 +55,7 @@ const modifyDays = (timeslot) => {
         finalDays[year][month].push(date);
     });
 
-    return modifiedDays;
+    return finalDays;
 };
 
 module.exports = { logs, getUserFromToken, modifyDays };

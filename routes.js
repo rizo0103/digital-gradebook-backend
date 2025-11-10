@@ -53,6 +53,8 @@ router.post('/create-timeslot', async(req, res) => {
         // verify token (throws if invalid)
         const decoded = jwt.verify(token, private);
         const username = decoded && decoded.username;
+
+        timeslot.sort((a, b) => a - b);
         
         if (!username) {
             console.error(logs(req).err);
