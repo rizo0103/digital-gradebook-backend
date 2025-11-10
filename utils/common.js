@@ -25,4 +25,37 @@ const getUserFromToken = async (token, jwt, private, connection) => {
     }
 }
 
-module.exports = { logs, getUserFromToken };
+const modifyDays = (timeslot) => {
+    const modifiedDays = timeslot.map(day => {
+        let year = `${day}`.substring(0, 4),
+            month = `${day}`.substring(4, 6),
+            date = `${day}`.substring(6, 8);
+
+        return `${year}-${month}-${date}`;
+    }), months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    const finalDays = {};
+        
+    modifiedDays.map(day => {
+        let dateObj = new Date(day);
+        let year = dateObj.getFullYear();
+        let month = months[dateObj.getMonth()];
+
+        finalDays[year] = finalDays[year] || {};
+        finalDays[year][month] = finalDays[month] || [];
+    });
+
+        
+    modifiedDays.map(day => {
+        let dateObj = new Date(day);
+        let year = dateObj.getFullYear();
+        let month = months[dateObj.getMonth()];
+        let date = dateObj.getDate();
+        
+        finalDays[year][month].push(date);
+    });
+
+    return modifiedDays;
+};
+
+module.exports = { logs, getUserFromToken, modifyDays };
