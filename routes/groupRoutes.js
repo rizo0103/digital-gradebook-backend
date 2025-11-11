@@ -7,7 +7,7 @@ const { logs, getUserFromToken, modifyDays } = require('../utils/common');
 
 const groupRouter = express.Router();
 const upload = multer({
-    limits: { fileSize: 50 * 1024 * 1024 } // 50 MB limit
+    limits: { fileSize: 500 * 1024 * 1024 } // 500 MB limit
 });
 
 groupRouter.get("/get-timeslots", async(req, res) => {
