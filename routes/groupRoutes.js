@@ -1,10 +1,14 @@
 const express = require('express');
 const connection = require('../db');
 const jwt = require("jsonwebtoken");
+const multer = require('multer');
 const { private } = require("../configs");
 const { logs, getUserFromToken, modifyDays } = require('../utils/common');
 
 const groupRouter = express.Router();
+const upload = multer({
+    limits: { fileSize: 50 * 1024 * 1024 } // 50 MB limit
+});
 
 groupRouter.get("/get-timeslots", async(req, res) => {
     const { token } = req.headers;
@@ -61,6 +65,15 @@ groupRouter.post("/create-group", async(req, res) => {
         if (user.status !== "admin") {
             console.error(logs(req).err);
             return res.status(403).json({ message: "forbidden" });
+        }
+
+        // check if there is a table for the groups
+        const [tables] = await connection.promise().query("SHOW TABLES LIKE 'groups'");
+
+        if (tables.length === 0) {
+            // create table if not exists
+            await connection.promise().query("CREATE TABLE groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), amount INT, days JSON, teacher VARCHAR(255), students JSON DEFAULT '[]')");
+            console.log("Groups table created");
         }
 
         // create group
@@ -291,6 +304,24 @@ groupRouter.post("/create-timeslot", async (req, res) => {
         console.error(logs(req).err);
 
         return res.status(500).json({message: "server error " + err});
+    }
+});
+
+groupRouter.post("/upload-students", upload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: "No file uploaded" });
+        }
+
+        const jsonString = req.file.buffer.toString('utf8');
+        const students = await JSON.parse(jsonString);
+
+        console.log(await students[0]);
+
+        // return res.status(200).json({ message: "file processed", data: students });
+    } catch (error) {
+        console.error(logs(req).err);
+        return res.status(500).json({ message: "server error " + error });
     }
 });
 

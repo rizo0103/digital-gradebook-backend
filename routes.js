@@ -9,6 +9,8 @@ const groupRouter = require('./routes/groupRoutes');
 
 const router = express.Router();
 
+router.use(express.json({ limit: '50mb' }));
+router.use(express.urlencoded({ extended: true, limit: '50mb' }));
 router.use(userRouter);
 router.use(authRouter);
 router.use(groupRouter);
