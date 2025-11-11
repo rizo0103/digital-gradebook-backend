@@ -40,11 +40,24 @@ userRouter.post("/create-user", async(req, res) => {
 
         console.log(logs(req).ok);
 
+        if (result.affectedRows === 0) {
+            console.error(logs(req).err);
+            
+            return res.status(500).json({ message: "user creation failed" });
+        }
+
+        console.log(groups);
+
+        groups.forEach(async (group) => {
+            const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
+            const [resp] = await connection.promise().query(updateGroupSql, [`${korean_last_name} ${korean_first_name}`, group]);
+        });
+
         return res.status(200).json({ message: "user created", data: result });
     } catch (error) {
         console.error(logs(req).err);
 
-        return res.status(500).json({ message: "server error " + error });
+        return res.status(500).json({ message: "server error " + error});
     }
 });
 

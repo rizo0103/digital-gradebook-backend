@@ -103,7 +103,7 @@ groupRouter.get("/get-groups", async (req, res) => {
 
         if (user.status === "teacher") {
             sql = "SELECT * FROM groups WHERE teacher = ?";
-            filter.push(user.username);
+            filter.push(`${user.korean_last_name} ${user.korean_first_name}`);
         }
 
         const [results] = await connection.promise().query(sql, filter);
