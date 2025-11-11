@@ -72,7 +72,7 @@ groupRouter.post("/create-group", async(req, res) => {
 
         if (tables.length === 0) {
             // create table if not exists
-            await connection.promise().query("CREATE TABLE groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), amount INT, days JSON, teacher VARCHAR(255), students JSON DEFAULT '[]')");
+            await connection.promise().query("CREATE TABLE groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), amount INT, days JSON, teacher VARCHAR(255), students JSON NULL)");
             console.log("Groups table created");
         }
 
@@ -307,22 +307,50 @@ groupRouter.post("/create-timeslot", async (req, res) => {
     }
 });
 
-groupRouter.post("/upload-students", upload.single("file"), async (req, res) => {
+groupRouter.post("/upload-students", async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ message: "No file uploaded" });
+        const raw = req.body;
+
+        console.log(raw);
+
+        if (!raw) {
+            return res.status(400).json({ message: "No students provided" });
         }
 
-        const jsonString = req.file.buffer.toString('utf8');
-        const students = await JSON.parse(jsonString);
+        const students = raw;
 
-        console.log(await students[0]);
+        await Promise.all(students.map(async student => {
+            const group = student.student_group;
+            const sql = `
+                UPDATE groups
+                SET students = JSON_ARRAY_APPEND(
+                    COALESCE(students, JSON_ARRAY()),
+                    '$',
+                    CAST(? AS JSON)
+                )
+                WHERE name = ?
+            `;
 
-        // return res.status(200).json({ message: "file processed", data: students });
+            const payload = {
+                student_id: student.id,
+                korean_last_name: student.last_name_kr,
+                korean_first_name: student.name_kr,
+                english_last_name: student.last_name_en,
+                english_first_name: student.name_en,
+                attendance: {}
+            };
+
+            await connection.promise().query(sql, [JSON.stringify(payload), group]);
+        }));
+
+        console.log(logs(req).ok);
+
+        return res.status(200).json({ message: "processed", count: students.length });
     } catch (error) {
         console.error(logs(req).err);
         return res.status(500).json({ message: "server error " + error });
     }
 });
+
 
 module.exports = groupRouter;
