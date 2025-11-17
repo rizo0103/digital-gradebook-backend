@@ -46,8 +46,6 @@ userRouter.post("/create-user", async(req, res) => {
             return res.status(500).json({ message: "user creation failed" });
         }
 
-        console.log(groups);
-
         groups.forEach(async (group) => {
             const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
             const [resp] = await connection.promise().query(updateGroupSql, [`${korean_last_name} ${korean_first_name}`, group]);
@@ -181,6 +179,11 @@ userRouter.put("/update-user/:username", async (req, res) => {
         const [result] = await connection.promise().query(sql, [first_name_english, last_name_english, first_name_korean, last_name_korean, new_username, new_password, JSON.stringify(new_groups), new_status, username]);
 
         console.log(logs(req).ok);
+
+        new_groups.forEach(async (group) => {
+            const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
+            const [resp] = await connection.promise().query(updateGroupSql, [`${last_name_korean} ${first_name_korean}`, group]);
+        });
 
         return res.status(200).json({ message: "user updated ", data: result });
     } catch (error) {

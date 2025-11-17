@@ -178,7 +178,7 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
         }
 
         // verify admin status
-        if (user.status !== "admin") {
+        if (user.status !== "admin" && user.status !== "teacher") {
             console.error(logs(req).err);
 
             return res.status(403).json({ message: "forbidden" });
@@ -311,8 +311,6 @@ groupRouter.post("/upload-students", async (req, res) => {
     try {
         const raw = req.body;
 
-        console.log(raw);
-
         if (!raw) {
             return res.status(400).json({ message: "No students provided" });
         }
@@ -352,5 +350,67 @@ groupRouter.post("/upload-students", async (req, res) => {
     }
 });
 
+groupRouter.post("/attendance", async (req, res) => {
+    const { payload } = req.body;
+    const { token } = req.headers;
+
+    try {
+        // verify token (throws if invalid)
+        const user = await getUserFromToken(token, jwt, private, connection);
+        if (!user) {
+            console.error(logs(req).err, "unauthorized");
+         
+            return res.status(401).json({ message: "unauthorized" });
+        }
+
+        // verify admin or teacher status
+        if (user.status !== "admin" && user.status !== "teacher") {
+            console.error(logs(req).err, "forbidden");
+         
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        // process attendance
+        if (payload && payload.attendance.length > 0) {
+            const studentsSql = "SELECT * FROM groups WHERE id = ?";
+            const [groupResults] = await connection.promise().query(studentsSql, [payload.groupId]),
+                students = groupResults[0].students;
+
+            // update attendance for each student
+            const attendance = payload.attendance;
+
+            for (let i = 0; i < attendance.length; ++i) {
+                for (let j = 0; j < students.length; ++j) {
+                    if (attendance[i].studentId === students[j].student_id) {
+                        if (students[j].attendance[payload.year] === undefined) {
+                            students[j].attendance[payload.year] = {};
+                        }
+                        if (students[j].attendance[payload.year][payload.month] === undefined) {
+                            students[j].attendance[payload.year][payload.month] = {};
+                        }
+
+                        students[j].attendance[payload.year][payload.month] = attendance[i].days;
+                        break;
+                    }
+                }
+            }
+
+            const updateSql = "UPDATE groups SET students = ? WHERE id = ?";
+            await connection.promise().query(updateSql, [JSON.stringify(payload.attendance), payload.groupId]);
+        
+            console.log(logs(req).ok);
+
+            return res.status(200).json({ message: "attendance updated" });
+        }
+        else {
+            console.error(logs(req).err, "no attendance data");
+            return res.status(400).json({ message: "no attendance data" });
+        }
+    } catch (error) {
+        console.error(logs(req).err);
+
+        return res.status(500).json({ message: "server error " + error });
+    }
+});
 
 module.exports = groupRouter;
