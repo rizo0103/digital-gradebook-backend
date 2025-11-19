@@ -413,4 +413,53 @@ groupRouter.post("/attendance", async (req, res) => {
     }
 });
 
+groupRouter.delete("/drop-database", async (req, res) => {
+    // Delete all db except users table
+    const { token } = req.headers;
+
+    try {
+        const user = await getUserFromToken(token, jwt, private, connection);
+
+        if (!user) {
+            console.error(logs(req), " unauthorized");
+            return res.status(401).json({ message: "unauthorized" });
+        }
+        
+        if (user.status !== "admin") {
+            console.error(logs(req), " forbidden");
+            return res.status(403).json({ message: "forbidden" });
+        }
+        
+        // 1. Get table names
+        let [tables] = await connection.promise().query("SHOW TABLES");
+        
+        // Extract the key dynamically (e.g. Tables_in_electronic-gradebook)
+        const tableKey = Object.keys(tables[0])[0];
+        
+        // 2. Create array of table names except "users"
+        const tablesToDelete = tables
+            .map(row => row[tableKey])
+            .filter(name => name !== "users");
+        
+        await connection.promise().query("SET FOREIGN_KEY_CHECKS = 0");
+        
+        // 3. Drop each table
+        for (const tableName of tablesToDelete) {
+            await connection.promise().query(`DROP TABLE IF EXISTS \`${tableName}\``);
+            console.log(`Dropped table: ${tableName}`);
+        }
+        
+        await connection.promise().query("SET FOREIGN_KEY_CHECKS = 1");
+        
+        console.log("All tables cleared except: users");
+        
+        return res.status(200).json({ message: "kenchana :)" });
+        
+        } catch (error) {
+        console.error(logs(req).err, " server error");
+
+        return res.status(500).json({ message: "server error " + error });
+    }
+});
+
 module.exports = groupRouter;
