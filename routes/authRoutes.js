@@ -38,12 +38,12 @@ authRouter.post("/login", (req, res) => {
 });
 
 authRouter.post("/register", async (req, res) => {
-    const { english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups, status } = await req.body;
+    const { english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email } = await req.body;
 
     try {
-        const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+        const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         
-        connection.query(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, JSON.stringify(groups), status], (err, results) => {
+        connection.query(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email], (err, results) => {
             if (err) console.log(err);
 
             console.log(logs(req).ok);

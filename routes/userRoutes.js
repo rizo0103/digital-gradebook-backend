@@ -77,13 +77,13 @@ userRouter.get("/get-all-users", async (req, res) => {
             return res.status(403).json({ message: "forbidden" });
         }
 
-        const sql = "SELECT * FROM users WHERE status = 'teacher'";
+        const sql = "SELECT * FROM users";
         const [results] = await connection.promise().query(sql);
 
-        const filteredResults = results.map(user => ({ username: user.username }));
+        // const filteredResults = results.map(({ password, ...user }) => user);
 
         console.log(logs(req).ok);
-        return res.status(200).json({ message: "success", data: filteredResults });
+        return res.status(200).json({ message: "success", data: results });
 
     } catch (error) {
         console.error(logs(req).err, "SERVER ERROR");
@@ -152,7 +152,7 @@ userRouter.get("/get-user-data/:username", async (req, res) => {
 
 userRouter.put("/update-user/:username", async (req, res) => {
     const { username } = req.params;
-    const { new_username, new_password, new_fullname_korean, new_fullname_english, new_groups, new_status } = req.body;
+    const { new_username, new_password, new_korean_first_name, new_korean_last_name, new_english_first_name, new_english_last_name, new_status, new_email } = req.body;
     const { token } = req.headers;
 
     try {
@@ -169,21 +169,16 @@ userRouter.put("/update-user/:username", async (req, res) => {
             console.error(logs(req).err);
             return res.status(403).json({ message: "forbidden" });
         }
-
-        let first_name_english = new_fullname_english.split(" ")[0],
-            last_name_english = new_fullname_english.split(" ")[1],
-            first_name_korean = new_fullname_korean.split(" ")[0],
-            last_name_korean = new_fullname_korean.split(" ")[1];
         
-        const sql = "UPDATE users SET english_first_name = ?, english_last_name = ?, korean_first_name = ?, korean_last_name = ?, username = ?, password = ?, groups = ?, status = ? WHERE username = ?";
-        const [result] = await connection.promise().query(sql, [first_name_english, last_name_english, first_name_korean, last_name_korean, new_username, new_password, JSON.stringify(new_groups), new_status, username]);
+        const sql = "UPDATE users SET english_first_name = ?, english_last_name = ?, korean_first_name = ?, korean_last_name = ?, username = ?, password = ?, status = ?, email = ? WHERE username = ?";
+        const [result] = await connection.promise().query(sql, [new_english_first_name, new_english_last_name, new_korean_first_name, new_korean_last_name, new_username, new_password, new_status, new_email, username]);
 
         console.log(logs(req).ok);
 
-        new_groups.forEach(async (group) => {
-            const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
-            const [resp] = await connection.promise().query(updateGroupSql, [`${last_name_korean} ${first_name_korean}`, group]);
-        });
+        // new_groups.forEach(async (group) => {
+        //     const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
+        //     const [resp] = await connection.promise().query(updateGroupSql, [`${last_name_korean} ${first_name_korean}`, group]);
+        // });
 
         return res.status(200).json({ message: "user updated ", data: result });
     } catch (error) {

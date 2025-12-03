@@ -43,15 +43,12 @@ groupRouter.get("/get-timeslots", async(req, res) => {
 });
 
 groupRouter.post("/create-group", async(req, res) => {
-    const { name, amount, days } = await req.body; 
+    const { name, level, time, teacher_name, schedule } = await req.body; 
     const { token } = req.headers;
 
     if (!token) {
         console.error(logs(req).err);
     }
-    
-    days.sort((a, b) => a - b);
-    let finalDays = modifyDays(days);
 
     try {
         // verify token (throws if invalid)
@@ -72,13 +69,16 @@ groupRouter.post("/create-group", async(req, res) => {
 
         if (tables.length === 0) {
             // create table if not exists
-            await connection.promise().query("CREATE TABLE groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), amount INT, days JSON, teacher VARCHAR(255), students JSON NULL)");
+            await connection.promise().query("CREATE TABLE groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), level VARCHAR(255), teacher_id INT, teacher_name VARCHAR(255), schedule VARCHAR(255), time VARCHAR(255))");
             console.log("Groups table created");
         }
 
+        const teacher_id = teacher_name.split(" ")[0];
+        const teacherName = `${teacher_name.split(" ")[1]} ${teacher_name.split(" ")[2]}`;
+
         // create group
-        const sql = "INSERT INTO groups (name, amount, days) VALUES (?, ?, ?)";
-        const [result] = await connection.promise().query(sql, [name, amount, JSON.stringify(finalDays)]);
+        const sql = "INSERT INTO groups (name, level, time, teacher_id, teacher_name, schedule) VALUES (?, ?, ?, ?, ?, ?)";
+        const [result] = await connection.promise().query(sql, [name, level, time, teacher_id, teacherName, schedule]);
 
         console.log(logs(req).ok);
         return res.status(200).json({ message: "group created", data: result });
@@ -115,8 +115,8 @@ groupRouter.get("/get-groups", async (req, res) => {
             filter = [];
 
         if (user.status === "teacher") {
-            sql = "SELECT * FROM groups WHERE teacher = ?";
-            filter.push(`${user.korean_last_name} ${user.korean_first_name}`);
+            sql = "SELECT * FROM groups WHERE teacher_id = ?";
+            filter.push(user.id);
         }
 
         const [results] = await connection.promise().query(sql, filter);
