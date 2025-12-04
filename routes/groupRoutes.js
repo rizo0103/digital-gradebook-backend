@@ -10,13 +10,13 @@ const upload = multer({
     limits: { fileSize: 500 * 1024 * 1024 } // 500 MB limit
 });
 
-groupRouter.get("/get-timeslots", async(req, res) => {
+groupRouter.get("/get-timeslots", async (req, res) => {
     const { token } = req.headers;
 
     try {
         // verify token (throws if invalid)
         const user = await getUserFromToken(token, jwt, private, connection);
-        
+
         if (!user) {
             console.error(logs(req).err);
             return res.status(401).json({ message: "unauthorized" });
@@ -42,8 +42,8 @@ groupRouter.get("/get-timeslots", async(req, res) => {
     }
 });
 
-groupRouter.post("/create-group", async(req, res) => {
-    const { name, level, time, teacher_name, schedule } = await req.body; 
+groupRouter.post("/create-group", async (req, res) => {
+    const { name, level, time, teacher_name, schedule } = await req.body;
     const { token } = req.headers;
 
     if (!token) {
@@ -96,17 +96,17 @@ groupRouter.get("/get-groups", async (req, res) => {
     try {
         // verify token (throws if invalid)
         const user = await getUserFromToken(token, jwt, private, connection);
-        
+
         if (!user) {
             console.error(logs(req).err);
-         
+
             return res.status(401).json({ message: "unauthorized" });
         }
-        
+
         // verify admin or teacher status
         if (user.status !== "admin" && user.status !== "teacher") {
             console.error(logs(req).err);
-         
+
             return res.status(403).json({ message: "forbidden" });
         }
 
@@ -186,7 +186,7 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
 
         let sql = "SELECT * FROM groups WHERE id = ?",
             [results] = await connection.promise().query(sql, id);
-        
+
         if (results.length === 0) {
             console.error(logs(req).err);
 
@@ -195,7 +195,44 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
 
         console.log(logs(req).ok);
 
-        return res.status(200).json({ message: "success", data: results[0] });
+        const group_name = results[0].name,
+            timeslot_name = results[0].schedule,
+            students_sql = `SELECT * FROM group_students WHERE group_name = ?`,
+            timeslot_sql = `SELECT * FROM timeslots WHERE name = ?`,
+            attendance_sql = `SELECT * FROM attendance WHERE group_name = ?`;
+
+        const [group_students] = await connection.promise().query(students_sql, [group_name]),
+            [timeslot] = await connection.promise().query(timeslot_sql, [timeslot_name]),
+            [attendace] = await connection.promise().query(attendance_sql, [group_name]);
+
+        if (group_students.length === 0) {
+            console.log(logs(req).err, " No students in this group");
+            return res.status(404).json({ message: "No students in this group" });
+        }
+
+        if (timeslot.length === 0) {
+            console.log(logs(req).err, " No timeslot with '" + timeslot_name + "' name");
+            return res.status(404).json({ message: `No timeslot with '${timeslot_name}' name` });
+        }
+
+        if (attendace.length === 0) {
+            console.log(logs(req).ok, " No data for this group");
+        } else {
+            attendace.map(item => item.date = new Date(new Date(item.date).getTime() + (5 * 60 * 60 * 1000)));
+        }
+
+
+        return res.status(200).json({
+            message: "success", data: {
+                group_data: results[0],
+                group_students: group_students,
+                group_schedule: {
+                    ...timeslot[0],
+                    days: modifyDays(timeslot[0].timeslot),
+                },
+                group_attendance: attendace,
+            }
+        });
     } catch (error) {
         console.error(logs(req).err);
 
@@ -235,7 +272,7 @@ groupRouter.put("/update-group/:id", async (req, res) => {
 
         let sql = "UPDATE groups SET name = ?, amount = ?, days = ? WHERE id = ?",
             [results] = await connection.promise().query(sql, [new_name, new_amount, JSON.stringify(finalDays), id]);
-        
+
         if (results.length === 0) {
             console.error(logs(req).err);
 
@@ -253,7 +290,7 @@ groupRouter.put("/update-group/:id", async (req, res) => {
 });
 
 groupRouter.post("/create-timeslot", async (req, res) => {
-        const { name, timeslot } = await req.body;
+    const { name, timeslot } = await req.body;
     const { token } = req.headers;
 
     if (!token) {
@@ -268,17 +305,17 @@ groupRouter.post("/create-timeslot", async (req, res) => {
         const username = decoded && decoded.username;
 
         timeslot.sort((a, b) => a - b);
-        
+
         if (!username) {
             console.error(logs(req).err);
-            
+
             return res.status(400).json({ message: "invalid token" });
         }
 
         // check if user is admin
         const [users] = await connection.promise().query("SELECT * FROM users WHERE username = ?", [username]);
         const user = users && users[0];
-        
+
         if (!user || user.status !== "admin") {
             console.error(logs(req).err);
             return res.status(403).json({ message: "forbidden" });
@@ -299,53 +336,73 @@ groupRouter.post("/create-timeslot", async (req, res) => {
 
         console.log(logs(req).ok);
 
-        return res.status(200).json({message: "success" });
+        return res.status(200).json({ message: "success" });
     } catch (err) {
         console.error(logs(req).err);
 
-        return res.status(500).json({message: "server error " + err});
+        return res.status(500).json({ message: "server error " + err });
     }
 });
 
-groupRouter.post("/upload-students", async (req, res) => {
+groupRouter.post("/upload-students", upload.single("file"), async (req, res) => {
     try {
-        const raw = req.body;
+        const jsonString = req.file.buffer.toString("utf8");
+        const students = JSON.parse(jsonString);
+        const { token } = req.headers;
 
-        if (!raw) {
-            return res.status(400).json({ message: "No students provided" });
+        if (!Array.isArray(students)) {
+            return res.status(400).json({ message: "Invalid JSON format" });
         }
 
-        const students = raw;
+        if (!token) {
+            return res.status(400).json({ message: "no token provided" });
+        }
 
-        await Promise.all(students.map(async student => {
-            const group = student.student_group;
-            const sql = `
-                UPDATE groups
-                SET students = JSON_ARRAY_APPEND(
-                    COALESCE(students, JSON_ARRAY()),
-                    '$',
-                    CAST(? AS JSON)
+        // verify token
+        const user = await getUserFromToken(token, jwt, private, connection);
+        if (!user || user.status !== "admin") {
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        // ensure table exists
+        const [tables] = await connection
+            .promise()
+            .query("SHOW TABLES LIKE 'group_students'");
+
+        if (tables.length === 0) {
+            await connection.promise().query(`
+                CREATE TABLE group_students (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    group_name VARCHAR(255),
+                    student_name_english VARCHAR(255),
+                    student_name_korean VARCHAR(255),
+                    student_id INT,
+                    start_date DATE,
+                    end_date DATE NULL
                 )
-                WHERE name = ?
-            `;
+            `);
+        }
 
-            const payload = {
-                student_id: student.id,
-                korean_last_name: student.last_name_kr,
-                korean_first_name: student.name_kr,
-                english_last_name: student.last_name_en,
-                english_first_name: student.name_en,
-                attendance: {}
-            };
+        const sql = `
+            INSERT INTO group_students 
+            (group_name, student_name_english, student_name_korean, student_id, start_date)
+            VALUES (?, ?, ?, ?, ?)
+        `;
 
-            await connection.promise().query(sql, [JSON.stringify(payload), group]);
-        }));
+        for (const student of students[2].data) {
+            await connection.promise().query(sql, [
+                student.student_group,
+                `${student.last_name_en} ${student.name_en}`,
+                `${student.last_name_kr} ${student.name_kr}`,
+                Number(student.id),
+                student.created_at.split(" ")[0] // date only
+            ]);
+        }
 
-        console.log(logs(req).ok);
+        return res.status(200).json({ message: "Students uploaded!" });
 
-        return res.status(200).json({ message: "processed", count: students.length });
     } catch (error) {
-        console.error(logs(req).err);
+        console.error("Server Error:", error);
         return res.status(500).json({ message: "server error " + error });
     }
 });
@@ -359,14 +416,14 @@ groupRouter.post("/attendance", async (req, res) => {
         const user = await getUserFromToken(token, jwt, private, connection);
         if (!user) {
             console.error(logs(req).err, "unauthorized");
-         
+
             return res.status(401).json({ message: "unauthorized" });
         }
 
         // verify admin or teacher status
         if (user.status !== "admin" && user.status !== "teacher") {
             console.error(logs(req).err, "forbidden");
-         
+
             return res.status(403).json({ message: "forbidden" });
         }
 
@@ -397,7 +454,7 @@ groupRouter.post("/attendance", async (req, res) => {
 
             const updateSql = "UPDATE groups SET students = ? WHERE id = ?";
             await connection.promise().query(updateSql, [JSON.stringify(payload.attendance), payload.groupId]);
-        
+
             console.log(logs(req).ok);
 
             return res.status(200).json({ message: "attendance updated" });
@@ -413,6 +470,88 @@ groupRouter.post("/attendance", async (req, res) => {
     }
 });
 
+groupRouter.post('/save-attendance', async (req, res) => {
+    const { records } = req.body;
+    const { token } = req.headers;
+
+    try {
+        // 1. verify token
+        const user = await getUserFromToken(token, jwt, private, connection);
+        if (!user) return res.status(401).json({ message: "unauthorized" });
+
+        // 2. check teacher/admin
+        if (user.status !== "admin" && user.status !== "teacher") {
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        // 3. validate data
+        if (!records || records.length === 0) {
+            return res.status(400).json({ message: "no attendance data" });
+        }
+
+        // 4. create table if not exists
+        await connection.promise().query(`
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                student_id INT NOT NULL,
+                group_name VARCHAR(255) NOT NULL,
+                date DATE NOT NULL,
+                student_name_english VARCHAR(255),
+                student_name_korean VARCHAR(255),
+                status ENUM('present', 'absent', 'late') DEFAULT 'present',
+                UNIQUE KEY unique_attendance (student_id, group_name, date)
+            );
+        `);
+
+        // SQL for inserting attendance
+        const insertSql = `
+            INSERT INTO attendance 
+            (student_id, group_name, date, student_name_english, student_name_korean, status) 
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE status = VALUES(status)
+        `;
+
+        // 5. loop through attendance records
+        for (const item of records) {
+
+            // 5.1 get student info from group_students table
+            const [studentResult] = await connection.promise().query(
+                `
+                SELECT 
+                    student_name_english,
+                    student_name_korean
+                FROM group_students
+                WHERE student_id = ? AND group_name = ?
+                `,
+                [item.student_id, item.group_name]
+            );
+
+            if (studentResult.length === 0) {
+                console.error("student not found in group_students:", item);
+                continue; // skip this record
+            }
+
+            const student = studentResult[0];
+
+            // 5.2 insert into attendance
+            await connection.promise().query(insertSql, [
+                item.student_id,
+                item.group_name,
+                item.date,
+                student.student_name_english,
+                student.student_name_korean,
+                item.status
+            ]);
+        }
+
+        return res.status(200).json({ message: "Success" });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: "server error" });
+    }
+});
+
 groupRouter.delete("/drop-database", async (req, res) => {
     // Delete all db except users table
     const { token } = req.headers;
@@ -424,42 +563,127 @@ groupRouter.delete("/drop-database", async (req, res) => {
             console.error(logs(req), " unauthorized");
             return res.status(401).json({ message: "unauthorized" });
         }
-        
+
         if (user.status !== "admin") {
             console.error(logs(req), " forbidden");
             return res.status(403).json({ message: "forbidden" });
         }
-        
+
         // 1. Get table names
         let [tables] = await connection.promise().query("SHOW TABLES");
-        
+
         // Extract the key dynamically (e.g. Tables_in_electronic-gradebook)
         const tableKey = Object.keys(tables[0])[0];
-        
+
         // 2. Create array of table names except "users"
         const tablesToDelete = tables
             .map(row => row[tableKey])
             .filter(name => name !== "users");
-        
+
         await connection.promise().query("SET FOREIGN_KEY_CHECKS = 0");
-        
+
         // 3. Drop each table
         for (const tableName of tablesToDelete) {
             await connection.promise().query(`DROP TABLE IF EXISTS \`${tableName}\``);
             console.log(`Dropped table: ${tableName}`);
         }
-        
+
         await connection.promise().query("SET FOREIGN_KEY_CHECKS = 1");
-        
+
         console.log("All tables cleared except: users");
-        
+
         return res.status(200).json({ message: "kenchana :)" });
-        
-        } catch (error) {
+
+    } catch (error) {
         console.error(logs(req).err, " server error");
 
         return res.status(500).json({ message: "server error " + error });
     }
 });
+
+groupRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
+    const groupId = req.params.groupId;
+    const { year, month, group_name } = req.query;
+    const monthNumber = parseInt(month, 10);
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const ExcelJS = require("exceljs");
+
+    try {
+        // 1. Get group students
+        const [students] = await connection.promise().query(
+            `SELECT id, student_name_english, student_name_korean
+             FROM group_students
+             WHERE group_name = ?
+             ORDER BY student_name_english`,
+            [group_name]
+        );
+
+        // 2. Get attendance for this month
+        const [attendance] = await connection.promise().query(
+            `SELECT student_id, date, status
+             FROM attendance
+             WHERE group_name = ?
+             AND YEAR(date) = ?
+             AND MONTH(date) = ?`,
+            [group_name, year, monthNumber]
+        );
+
+        // 3. Build attendance map and collect unique dates
+        const attendanceMap = {};
+        const uniqueDates = new Set();
+
+        attendance.forEach(item => {
+            const dateOnly = item.date instanceof Date ? new Date(new Date(item.date).getTime() + (5 * 60 * 60 * 1000)).toISOString().split("T")[0].split("-")[2] : item.date;
+            attendanceMap[`${dateOnly}_${item.student_id}`] = item.status;
+            uniqueDates.add(dateOnly);
+        });
+
+        // 4. Sort dates ascending
+        const sortedDates = Array.from(uniqueDates).sort();
+
+        // 5. Prepare Excel
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet("Attendance");
+        sheet.addRow([group_name])
+        sheet.addRow([months[month - 1]]);
+
+        // 6. Header row: Student + sorted dates
+        const headerRow = ["Student", ...sortedDates];
+        sheet.addRow(headerRow);
+
+        const convert = (s) => s === "present" ? "o" : s === "absent" ? "x" : s === "late" ? "△" : "";
+
+        // 7. Rows for each student
+        students.forEach(student => {
+            const row = [student.student_name_english];
+            sortedDates.forEach(date => {
+                row.push(convert(attendanceMap[`${date}_${student.id}`]));
+            });
+            sheet.addRow(row);
+        });
+
+        // 8. Set headers for download
+        res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+
+        const fileName = `attendance_${group_name}_${year}_${month}.xlsx`;
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
+        );
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        res.setHeader("Content-Length", buffer.length);
+        res.send(buffer);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "server error" });
+    }
+});
+
 
 module.exports = groupRouter;
