@@ -652,16 +652,52 @@ groupRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
         const headerRow = ["Student", ...sortedDates];
         sheet.addRow(headerRow);
 
-        const convert = (s) => s === "present" ? "o" : s === "absent" ? "x" : s === "late" ? "△" : "";
+        const convert = (s) => s === "present" ? "" : s === "absent" ? "x" : s === "late" ? "△" : "";
 
         // 7. Rows for each student
         students.forEach(student => {
-            const row = [student.student_name_english];
+            const rowData = [student.student_name_english];
+
+            // 1. Формируем данные строки
             sortedDates.forEach(date => {
-                row.push(convert(attendanceMap[`${date}_${student.id}`]));
+                rowData.push(convert(attendanceMap[`${date}_${student.id}`]));
             });
-            sheet.addRow(row);
+
+            // 2. Добавляем строку в Excel
+            const row = sheet.addRow(rowData);
+
+            // 3. Раскрашиваем ячейки по статусу
+            sortedDates.forEach((date, idx) => {
+                const status = attendanceMap[`${date}_${student.id}`];
+                const cell = row.getCell(idx + 2); // +2, потому что 1-й столбец — Student
+
+                if (status === "absent") {
+                    // Светло-красный фон
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFC7CE' } // мягкий красный
+                    };
+                }
+
+                if (status === "late") {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFFFFFCC' } // мягкий желтый
+                    };
+                }
+
+                if (status === "present") {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFD9EAD3' } // мягкий зеленый
+                    };
+                }
+            });
         });
+
 
         // 8. Set headers for download
         res.setHeader(
