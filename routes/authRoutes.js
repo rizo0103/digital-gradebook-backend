@@ -2,7 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { private } = require('../configs');
 const { logs } = require('../utils/common');
-const { connectToCloudSQL } = require('../db');
+const connectToCloudSQL = require('../db');
 
 const authRouter = express.Router();
 
@@ -10,7 +10,7 @@ authRouter.post("/login", async (req, res) => {
     const { username, password } = req.body;
 
     try {
-        const pool = connectToCloudSQL();
+        const pool = await connectToCloudSQL;
         const sql = "SELECT * FROM users WHERE username = ? AND password = ?";
         const filter = [username, password];
 
@@ -23,7 +23,7 @@ authRouter.post("/login", async (req, res) => {
 
             return res.status(200).json({ message: "success", token: token });
         } else {
-            console.error(logs(req).err);
+            console.error(logs(req).err, " not found");
 
             return res.status(404).json({ message: "user was not found..." });
         }

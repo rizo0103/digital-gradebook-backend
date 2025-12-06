@@ -1,3 +1,5 @@
+const connectToCloudSQL = require("../db");
+
 const logs = (req) => {
     return {
         ok: req.method + " " + req.protocol + "://" + req.ip + " " + req.path + " okay :)",
@@ -5,13 +7,14 @@ const logs = (req) => {
     }
 };
 
-const getUserFromToken = async (token, jwt, private, connection) => {
+const getUserFromToken = async (token, jwt, private) => {
     try {
+        const pool = await connectToCloudSQL;
         const decoded = jwt.verify(token, private);
         const username = decoded && decoded.username;
         const password = decoded && decoded.password;
 
-        const [users] = await connection.promise().query("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
+        const [users] = await pool.execute("SELECT * FROM users WHERE username = ? AND password = ?", [username, password]);
 
         if (users.length) {
             return users[0];

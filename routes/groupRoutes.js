@@ -1,5 +1,5 @@
 const express = require('express');
-const connection = require('../db');
+const connectToCloudSQL = require('../db');
 const jwt = require("jsonwebtoken");
 const multer = require('multer');
 const { private } = require("../configs");
@@ -15,7 +15,8 @@ groupRouter.get("/get-timeslots", async (req, res) => {
 
     try {
         // verify token (throws if invalid)
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const pool = await connectToCloudSQL;
+        const user = await getUserFromToken(token, jwt, private);
 
         if (!user) {
             console.error(logs(req).err);
@@ -30,9 +31,13 @@ groupRouter.get("/get-timeslots", async (req, res) => {
 
         // get timeslots
         const sql = "SELECT * FROM timeslots";
-        const [results] = await connection.promise().query(sql);
+        const [results] = await pool.query(sql);
 
         console.log(logs(req).ok);
+        if (results.length === 0) {
+            return res.status(404).json({ message: "no timeslots found" });
+        }
+        
         return res.status(200).json({ message: "success", data: results });
 
     } catch (error) {
@@ -43,88 +48,104 @@ groupRouter.get("/get-timeslots", async (req, res) => {
 });
 
 groupRouter.post("/create-group", async (req, res) => {
-    const { name, level, time, teacher_name, schedule } = await req.body;
+    const { name, level, time, teacher_name, schedule } = req.body;
     const { token } = req.headers;
 
     if (!token) {
-        console.error(logs(req).err);
+        return res.status(400).json({ message: "no token provided" });
     }
 
     try {
-        // verify token (throws if invalid)
-        const user = await getUserFromToken(token, jwt, private, connection);
-        if (!user) {
-            console.error(logs(req).err);
-            return res.status(401).json({ message: "unauthorized" });
-        }
+        const pool = await connectToCloudSQL;  // FIXED
+        const user = await getUserFromToken(token, jwt, private);
 
-        // verify admin status
-        if (user.status !== "admin") {
-            console.error(logs(req).err);
-            return res.status(403).json({ message: "forbidden" });
-        }
+        if (!user) return res.status(401).json({ message: "unauthorized" });
+        if (user.status !== "admin") return res.status(403).json({ message: "forbidden" });
 
-        // check if there is a table for the groups
-        const [tables] = await connection.promise().query("SHOW TABLES LIKE 'groups'");
-
+        const [tables] = await pool.execute("SHOW TABLES LIKE 'groups'");
         if (tables.length === 0) {
-            // create table if not exists
-            await connection.promise().query("CREATE TABLE groups (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), level VARCHAR(255), teacher_id INT, teacher_name VARCHAR(255), schedule VARCHAR(255), time VARCHAR(255))");
-            console.log("Groups table created");
+            await pool.execute(`
+                CREATE TABLE \`groups\` (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255),
+                    level VARCHAR(255),
+                    teacher_id INT,
+                    teacher_name VARCHAR(255),
+                    schedule VARCHAR(255),
+                    time VARCHAR(255)
+                )
+            `);
         }
 
-        const teacher_id = teacher_name.split(" ")[0];
-        const teacherName = `${teacher_name.split(" ")[1]} ${teacher_name.split(" ")[2]}`;
+        const parts = teacher_name.trim().split(" ");
+        if (parts.length < 3) {
+            return res.status(400).json({ message: "Invalid teacher_name format" });
+        }
 
-        // create group
-        const sql = "INSERT INTO groups (name, level, time, teacher_id, teacher_name, schedule) VALUES (?, ?, ?, ?, ?, ?)";
-        const [result] = await connection.promise().query(sql, [name, level, time, teacher_id, teacherName, schedule]);
+        const teacher_id = parts[0];
+        const teacherName = parts.slice(1).join(" ");
+
+        const sql = `
+            INSERT INTO \`groups\` 
+            (name, level, time, teacher_id, teacher_name, schedule)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+
+        const [result] = await pool.execute(sql, [
+            name,
+            level,
+            time,
+            teacher_id,
+            teacherName,
+            schedule
+        ]);
 
         console.log(logs(req).ok);
         return res.status(200).json({ message: "group created", data: result });
-    } catch (error) {
-        console.error(logs(req).err);
 
+    } catch (error) {
+        console.error("server error:", error);
         return res.status(500).json({ message: "server error " + error });
     }
-
 });
+
 
 groupRouter.get("/get-groups", async (req, res) => {
     const { token } = req.headers;
 
     try {
         // verify token (throws if invalid)
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const pool = await connectToCloudSQL;
+        const user = await getUserFromToken(token, jwt, private);
 
         if (!user) {
-            console.error(logs(req).err);
+            console.error(logs(req).err, " unauthorized");
 
             return res.status(401).json({ message: "unauthorized" });
         }
 
         // verify admin or teacher status
         if (user.status !== "admin" && user.status !== "teacher") {
-            console.error(logs(req).err);
+            console.error(logs(req).err, " forbidden");
 
             return res.status(403).json({ message: "forbidden" });
         }
 
         // get groups
-        let sql = "SELECT * FROM groups",
+        let sql = "SELECT * FROM `groups`",
             filter = [];
 
         if (user.status === "teacher") {
-            sql = "SELECT * FROM groups WHERE teacher_id = ?";
+            sql = "SELECT * FROM `groups` WHERE teacher_id = ?";
             filter.push(user.id);
         }
 
-        const [results] = await connection.promise().query(sql, filter);
+        const [results] = await pool.execute(sql, filter);
 
-        console.log(logs(req).ok);
+        console.log(logs(req).ok, " groups retrieved");
         return res.status(200).json({ message: "success", data: results });
     } catch (error) {
-        console.error(logs(req).err);
+        console.error(logs(req).err, " server error");
 
         return res.status(500).json({ message: "server error " + error });
     }
@@ -135,7 +156,7 @@ groupRouter.get("/get-all-groups", async (req, res) => {
 
     try {
         // verify token (throws if invalid)
-
+        const pool = await connectToCloudSQL;
         const user = await getUserFromToken(token, jwt, private, connection);
 
         if (!user) {
@@ -151,7 +172,7 @@ groupRouter.get("/get-all-groups", async (req, res) => {
         }
 
         const sql = "SELECT * FROM groups";
-        const [results] = await connection.promise().query(sql);
+        const [results] = await pool.execute(sql);
 
         console.log(logs(req).ok);
 
@@ -169,26 +190,27 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
 
     try {
         // verify token (throws if invalid)
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const pool = await connectToCloudSQL;
+        const user = await getUserFromToken(token, jwt, private);
 
         if (!user) {
-            console.error(logs(req).err);
+            console.error(logs(req).err, " unauthorized");
 
             return res.status(401).json({ message: "unauthorized" });
         }
 
         // verify admin status
         if (user.status !== "admin" && user.status !== "teacher") {
-            console.error(logs(req).err);
+            console.error(logs(req).err, " forbidden");
 
             return res.status(403).json({ message: "forbidden" });
         }
 
-        let sql = "SELECT * FROM groups WHERE id = ?",
-            [results] = await connection.promise().query(sql, id);
+        let sql = "SELECT * FROM `groups` WHERE id = ?",
+            [results] = await pool.execute(sql, [id]);
 
         if (results.length === 0) {
-            console.error(logs(req).err);
+            console.error(logs(req).err, " group not found");
 
             return res.status(404).json({ message: "group was not found" });
         }
@@ -201,9 +223,8 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
             timeslot_sql = `SELECT * FROM timeslots WHERE name = ?`,
             attendance_sql = `SELECT * FROM attendance WHERE group_name = ?`;
 
-        const [group_students] = await connection.promise().query(students_sql, [group_name]),
-            [timeslot] = await connection.promise().query(timeslot_sql, [timeslot_name]),
-            [attendace] = await connection.promise().query(attendance_sql, [group_name]);
+        const [group_students] = await pool.execute(students_sql, [group_name]),
+            [timeslot] = await pool.execute(timeslot_sql, [timeslot_name]);
 
         if (group_students.length === 0) {
             console.log(logs(req).err, " No students in this group");
@@ -215,12 +236,22 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
             return res.status(404).json({ message: `No timeslot with '${timeslot_name}' name` });
         }
 
-        if (attendace.length === 0) {
-            console.log(logs(req).ok, " No data for this group");
-        } else {
-            attendace.map(item => item.date = new Date(new Date(item.date).getTime() + (5 * 60 * 60 * 1000)));
-        }
+        let attendance = []; // always initialized
 
+        const [attendance_tables] = await pool.execute("SHOW TABLES LIKE 'attendance'");
+
+        if (attendance_tables.length !== 0) {
+            const [rows] = await pool.execute(attendance_sql, [group_name]);
+
+            if (rows.length > 0) {
+                rows.forEach(item => item.date = new Date(new Date(item.date).getTime() + (5 * 60 * 60 * 1000)));
+                attendance = rows;
+            } else {
+                console.log(logs(req).ok, " No attendance data for this group");
+            }
+        } else {
+            console.log(logs(req).ok, " No attendance table");
+        }
 
         return res.status(200).json({
             message: "success", data: {
@@ -230,11 +261,11 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
                     ...timeslot[0],
                     days: modifyDays(timeslot[0].timeslot),
                 },
-                group_attendance: attendace,
+                group_attendance: attendance,
             }
         });
     } catch (error) {
-        console.error(logs(req).err);
+        console.error(logs(req).err, " server error");
 
         return res.status(500).json({ message: "server error" + error });
     }
@@ -255,6 +286,7 @@ groupRouter.put("/update-group/:id", async (req, res) => {
 
     try {
         // verify token (throws if invalid)
+        const pool = await connectToCloudSQL;
         const user = await getUserFromToken(token, jwt, private, connection);
 
         if (!user) {
@@ -271,7 +303,7 @@ groupRouter.put("/update-group/:id", async (req, res) => {
         }
 
         let sql = "UPDATE groups SET name = ?, amount = ?, days = ? WHERE id = ?",
-            [results] = await connection.promise().query(sql, [new_name, new_amount, JSON.stringify(finalDays), id]);
+            [results] = await pool.execute(sql, [new_name, new_amount, JSON.stringify(finalDays), id]);
 
         if (results.length === 0) {
             console.error(logs(req).err);
@@ -301,6 +333,7 @@ groupRouter.post("/create-timeslot", async (req, res) => {
 
     try {
         // verify token (throws if invalid)
+        const pool = await connectToCloudSQL;
         const decoded = jwt.verify(token, private);
         const username = decoded && decoded.username;
 
@@ -313,7 +346,7 @@ groupRouter.post("/create-timeslot", async (req, res) => {
         }
 
         // check if user is admin
-        const [users] = await connection.promise().query("SELECT * FROM users WHERE username = ?", [username]);
+        const [users] = await pool.query("SELECT * FROM users WHERE username = ?", [username]);
         const user = users && users[0];
 
         if (!user || user.status !== "admin") {
@@ -322,17 +355,17 @@ groupRouter.post("/create-timeslot", async (req, res) => {
         }
 
         // check if there is table for the timeslots
-        const [tables] = await connection.promise().query("SHOW TABLES LIKE 'timeslots'");
+        const [tables] = await pool.query("SHOW TABLES LIKE 'timeslots'");
 
         if (tables.length === 0) {
             // create table if not exists
-            await connection.promise().query("CREATE TABLE timeslots (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), timeslot JSON)");
+            await pool.query("CREATE TABLE timeslots (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), timeslot JSON)");
             console.log("Timeslots table created");
         }
 
         const sql = "INSERT INTO timeslots (name, timeslot) VALUES (?, ?)";
         const filter = [name, JSON.stringify(timeslot)];
-        await connection.promise().query(sql, filter);
+        await pool.query(sql, filter);
 
         console.log(logs(req).ok);
 
@@ -346,6 +379,7 @@ groupRouter.post("/create-timeslot", async (req, res) => {
 
 groupRouter.post("/upload-students", upload.single("file"), async (req, res) => {
     try {
+        const pool = await connectToCloudSQL;
         const jsonString = req.file.buffer.toString("utf8");
         const students = JSON.parse(jsonString);
         const { token } = req.headers;
@@ -359,18 +393,16 @@ groupRouter.post("/upload-students", upload.single("file"), async (req, res) => 
         }
 
         // verify token
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const user = await getUserFromToken(token, jwt, private);
         if (!user || user.status !== "admin") {
             return res.status(403).json({ message: "forbidden" });
         }
 
         // ensure table exists
-        const [tables] = await connection
-            .promise()
-            .query("SHOW TABLES LIKE 'group_students'");
+        const [tables] = await pool.execute("SHOW TABLES LIKE 'group_students'");
 
         if (tables.length === 0) {
-            await connection.promise().query(`
+            await pool.execute(`
                 CREATE TABLE group_students (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     group_name VARCHAR(255),
@@ -390,7 +422,7 @@ groupRouter.post("/upload-students", upload.single("file"), async (req, res) => 
         `;
 
         for (const student of students[2].data) {
-            await connection.promise().query(sql, [
+            await pool.execute(sql, [
                 student.student_group,
                 `${student.last_name_en} ${student.name_en}`,
                 `${student.last_name_kr} ${student.name_kr}`,
@@ -413,6 +445,7 @@ groupRouter.post("/attendance", async (req, res) => {
 
     try {
         // verify token (throws if invalid)
+        const pool = await connectToCloudSQL;
         const user = await getUserFromToken(token, jwt, private, connection);
         if (!user) {
             console.error(logs(req).err, "unauthorized");
@@ -429,8 +462,8 @@ groupRouter.post("/attendance", async (req, res) => {
 
         // process attendance
         if (payload && payload.attendance.length > 0) {
-            const studentsSql = "SELECT * FROM groups WHERE id = ?";
-            const [groupResults] = await connection.promise().query(studentsSql, [payload.groupId]),
+            const studentsSql = "SELECT * FROM `groups` WHERE id = ?";
+            const [groupResults] = await pool.execute(studentsSql, [payload.groupId]),
                 students = groupResults[0].students;
 
             // update attendance for each student
@@ -452,8 +485,8 @@ groupRouter.post("/attendance", async (req, res) => {
                 }
             }
 
-            const updateSql = "UPDATE groups SET students = ? WHERE id = ?";
-            await connection.promise().query(updateSql, [JSON.stringify(payload.attendance), payload.groupId]);
+            const updateSql = "UPDATE `groups` SET students = ? WHERE id = ?";
+            await pool.execute(updateSql, [JSON.stringify(payload.attendance), payload.groupId]);
 
             console.log(logs(req).ok);
 
@@ -475,8 +508,9 @@ groupRouter.post('/save-attendance', async (req, res) => {
     const { token } = req.headers;
 
     try {
+        const pool = await connectToCloudSQL;
         // 1. verify token
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const user = await getUserFromToken(token, jwt, private);
         if (!user) return res.status(401).json({ message: "unauthorized" });
 
         // 2. check teacher/admin
@@ -490,7 +524,7 @@ groupRouter.post('/save-attendance', async (req, res) => {
         }
 
         // 4. create table if not exists
-        await connection.promise().query(`
+        await pool.execute(`
             CREATE TABLE IF NOT EXISTS attendance (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 student_id INT NOT NULL,
@@ -515,7 +549,7 @@ groupRouter.post('/save-attendance', async (req, res) => {
         for (const item of records) {
 
             // 5.1 get student info from group_students table
-            const [studentResult] = await connection.promise().query(
+            const [studentResult] = await pool.execute(
                 `
                 SELECT 
                     student_name_english,
@@ -534,7 +568,7 @@ groupRouter.post('/save-attendance', async (req, res) => {
             const student = studentResult[0];
 
             // 5.2 insert into attendance
-            await connection.promise().query(insertSql, [
+            await pool.execute(insertSql, [
                 item.student_id,
                 item.group_name,
                 item.date,
@@ -557,6 +591,7 @@ groupRouter.delete("/drop-database", async (req, res) => {
     const { token } = req.headers;
 
     try {
+        const pool = await connectToCloudSQL;
         const user = await getUserFromToken(token, jwt, private, connection);
 
         if (!user) {
@@ -570,7 +605,7 @@ groupRouter.delete("/drop-database", async (req, res) => {
         }
 
         // 1. Get table names
-        let [tables] = await connection.promise().query("SHOW TABLES");
+        let [tables] = await pool.execute("SHOW TABLES");
 
         // Extract the key dynamically (e.g. Tables_in_electronic-gradebook)
         const tableKey = Object.keys(tables[0])[0];
@@ -580,15 +615,15 @@ groupRouter.delete("/drop-database", async (req, res) => {
             .map(row => row[tableKey])
             .filter(name => name !== "users");
 
-        await connection.promise().query("SET FOREIGN_KEY_CHECKS = 0");
+        await pool.execute("SET FOREIGN_KEY_CHECKS = 0");
 
         // 3. Drop each table
         for (const tableName of tablesToDelete) {
-            await connection.promise().query(`DROP TABLE IF EXISTS \`${tableName}\``);
+            await pool.execute(`DROP TABLE IF EXISTS \`${tableName}\``);
             console.log(`Dropped table: ${tableName}`);
         }
 
-        await connection.promise().query("SET FOREIGN_KEY_CHECKS = 1");
+        await pool.execute("SET FOREIGN_KEY_CHECKS = 1");
 
         console.log("All tables cleared except: users");
 
@@ -610,8 +645,9 @@ groupRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
     const ExcelJS = require("exceljs");
 
     try {
+        const pool = await connectToCloudSQL;
         // 1. Get group students
-        const [students] = await connection.promise().query(
+        const [students] = await pool.execute(
             `SELECT id, student_name_english, student_name_korean
              FROM group_students
              WHERE group_name = ?
@@ -620,7 +656,7 @@ groupRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
         );
 
         // 2. Get attendance for this month
-        const [attendance] = await connection.promise().query(
+        const [attendance] = await pool.execute(
             `SELECT student_id, date, status
              FROM attendance
              WHERE group_name = ?

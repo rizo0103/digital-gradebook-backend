@@ -1,8 +1,8 @@
 const express = require('express');
-const connection = require('../db');
 const jwt = require("jsonwebtoken");
 const { private } = require("../configs");
 const { logs, getUserFromToken } = require('../utils/common');
+const connectToCloudSQL = require('../db');
 
 const userRouter = express.Router();
 
@@ -19,8 +19,9 @@ userRouter.post("/create-user", async(req, res) => {
     let korean_first_name = fullname_korean.split(" ")[0], korean_last_name = fullname_korean.split(" ")[1];
 
     try {
+        const pool = await connectToCloudSQL;
         // verify token
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const user = await getUserFromToken(token, jwt, private);
         if (!user) {
             console.error(logs(req).err);
             return res.status(401).json({ message: "unauthorized" });
@@ -36,7 +37,7 @@ userRouter.post("/create-user", async(req, res) => {
         // create user
         const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         
-        const [result] = await connection.promise().query(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, JSON.stringify(groups), status]);
+        const [result] = await pool.execute(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, JSON.stringify(groups), status]);
 
         console.log(logs(req).ok);
 
@@ -48,7 +49,7 @@ userRouter.post("/create-user", async(req, res) => {
 
         groups.forEach(async (group) => {
             const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
-            const [resp] = await connection.promise().query(updateGroupSql, [`${korean_last_name} ${korean_first_name}`, group]);
+            const [resp] = await pool.execute(updateGroupSql, [`${korean_last_name} ${korean_first_name}`, group]);
         });
 
         return res.status(200).json({ message: "user created", data: result });
@@ -64,13 +65,14 @@ userRouter.get("/get-all-users", async (req, res) => {
 
     try {
         // verify token
+        const pool = await connectToCloudSQL;
         if (!token) {
             console.error(logs(req).err, "TOKEN ERROR");
             return res.status(401).json({ message: "unauthorized" });
         }
 
         // verify admin status
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const user = await getUserFromToken(token, jwt, private);
 
         if (user.status !== "admin") {
             console.error(logs(req).err, "STATUS ERROR");
@@ -78,7 +80,7 @@ userRouter.get("/get-all-users", async (req, res) => {
         }
 
         const sql = "SELECT * FROM users";
-        const [results] = await connection.promise().query(sql);
+        const [results] = await pool.query(sql);
 
         // const filteredResults = results.map(({ password, ...user }) => user);
 
@@ -97,7 +99,7 @@ userRouter.get("/get-user-data", async (req, res) => {
 
     try {
         // verify token
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const user = await getUserFromToken(token, jwt, private);
         if (!user) {
             console.error(logs(req).err);
             return res.status(401).json({ message: "unauthorized" });
@@ -119,6 +121,7 @@ userRouter.get("/get-user-data/:username", async (req, res) => {
 
     try {
         // verify token
+        const pool = await connectToCloudSQL;
         const requestingUser = await getUserFromToken(token, jwt, private, connection);
         
         if (!requestingUser) {
@@ -133,7 +136,7 @@ userRouter.get("/get-user-data/:username", async (req, res) => {
         }
 
         const sql = "SELECT * FROM users WHERE username = ?";
-        const [results] = await connection.promise().query(sql, [username]);
+        const [results] = await pool.execute(sql, [username]);
 
         if (results.length === 0) {
             console.error(logs(req).err);
@@ -157,6 +160,7 @@ userRouter.put("/update-user/:username", async (req, res) => {
 
     try {
         // verify token
+        const pool = await connectToCloudSQL;
         const requestingUser = await getUserFromToken(token, jwt, private, connection);
         
         if (!requestingUser) {
@@ -171,13 +175,13 @@ userRouter.put("/update-user/:username", async (req, res) => {
         }
         
         const sql = "UPDATE users SET english_first_name = ?, english_last_name = ?, korean_first_name = ?, korean_last_name = ?, username = ?, password = ?, status = ?, email = ? WHERE username = ?";
-        const [result] = await connection.promise().query(sql, [new_english_first_name, new_english_last_name, new_korean_first_name, new_korean_last_name, new_username, new_password, new_status, new_email, username]);
+        const [result] = await pool.execute(sql, [new_english_first_name, new_english_last_name, new_korean_first_name, new_korean_last_name, new_username, new_password, new_status, new_email, username]);
 
         console.log(logs(req).ok);
 
         // new_groups.forEach(async (group) => {
         //     const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
-        //     const [resp] = await connection.promise().query(updateGroupSql, [`${last_name_korean} ${first_name_korean}`, group]);
+        //     const [resp] = await pool.execute(updateGroupSql, [`${last_name_korean} ${first_name_korean}`, group]);
         // });
 
         return res.status(200).json({ message: "user updated ", data: result });
