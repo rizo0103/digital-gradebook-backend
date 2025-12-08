@@ -375,6 +375,8 @@ groupRouter.post("/upload-students", upload.single("file"), async (req, res) => 
                     group_name VARCHAR(255),
                     student_name_english VARCHAR(255),
                     student_name_korean VARCHAR(255),
+                    phone_number VARCHAR(255),
+                    email VARCHAR(255),
                     student_id INT,
                     start_date DATE,
                     end_date DATE NULL
@@ -384,8 +386,8 @@ groupRouter.post("/upload-students", upload.single("file"), async (req, res) => 
 
         const sql = `
             INSERT INTO group_students 
-            (group_name, student_name_english, student_name_korean, student_id, start_date)
-            VALUES (?, ?, ?, ?, ?)
+            (group_name, student_name_english, student_name_korean, student_id, start_date, phone_number, email)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
 
         for (const student of students[2].data) {
@@ -394,7 +396,9 @@ groupRouter.post("/upload-students", upload.single("file"), async (req, res) => 
                 `${student.last_name_en} ${student.name_en}`,
                 `${student.last_name_kr} ${student.name_kr}`,
                 Number(student.id),
-                student.created_at.split(" ")[0] // date only
+                student.created_at.split(" ")[0], // date only
+                student.phone,
+                student.email
             ]);
         }
 
