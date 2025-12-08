@@ -36,7 +36,7 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/register", async (req, res) => {
-    const { english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email } = await req.body;
+    const { english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email, phone_number } = await req.body;
 
     try {
         const pool = await connectToCloudSQL();
@@ -52,7 +52,9 @@ authRouter.post("/register", async (req, res) => {
                     username VARCHAR(255) UNIQUE,
                     password VARCHAR(255),
                     status VARCHAR(50),
-                    email VARCHAR(255) UNIQUE
+                    email VARCHAR(255) UNIQUE,
+                    phone_number VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             `;
             await pool.query(createTableSQL);
@@ -60,8 +62,8 @@ authRouter.post("/register", async (req, res) => {
 
         const sql = `
             INSERT INTO users 
-            (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email, phone_number) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const [results] = await pool.execute(sql, [
@@ -73,6 +75,7 @@ authRouter.post("/register", async (req, res) => {
             password,
             status,
             email,
+            phone_number,
         ]);
 
         console.log(logs(req).ok);
