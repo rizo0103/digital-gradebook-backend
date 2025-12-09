@@ -6,6 +6,7 @@ const { logs } = require('./utils/common');
 const authRouter = require('./routes/authRoutes');
 const userRouter = require('./routes/userRoutes');
 const groupRouter = require('./routes/groupRoutes');
+const studentsRouter = require('./routes/studentsRoutes');
 
 const router = express.Router();
 
@@ -14,6 +15,7 @@ router.use(express.urlencoded({ extended: true, limit: '50mb' }));
 router.use(userRouter);
 router.use(authRouter);
 router.use(groupRouter);
+router.use(studentsRouter);
 
 router.get("/", (req, res) => {
     console.log(logs(req).ok);
