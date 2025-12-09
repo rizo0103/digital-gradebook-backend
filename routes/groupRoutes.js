@@ -410,70 +410,6 @@ groupRouter.post("/upload-students", upload.single("file"), async (req, res) => 
     }
 });
 
-groupRouter.post("/attendance", async (req, res) => {
-    const { payload } = req.body;
-    const { token } = req.headers;
-
-    try {
-        // verify token (throws if invalid)
-        const pool = await connectToCloudSQL;
-        const user = await getUserFromToken(token, jwt, private, connection);
-        if (!user) {
-            console.error(logs(req).err, "unauthorized");
-
-            return res.status(401).json({ message: "unauthorized" });
-        }
-
-        // verify admin or teacher status
-        if (user.status !== "admin" && user.status !== "teacher") {
-            console.error(logs(req).err, "forbidden");
-
-            return res.status(403).json({ message: "forbidden" });
-        }
-
-        // process attendance
-        if (payload && payload.attendance.length > 0) {
-            const studentsSql = "SELECT * FROM `groups` WHERE id = ?";
-            const [groupResults] = await pool.execute(studentsSql, [payload.groupId]),
-                students = groupResults[0].students;
-
-            // update attendance for each student
-            const attendance = payload.attendance;
-
-            for (let i = 0; i < attendance.length; ++i) {
-                for (let j = 0; j < students.length; ++j) {
-                    if (attendance[i].studentId === students[j].student_id) {
-                        if (students[j].attendance[payload.year] === undefined) {
-                            students[j].attendance[payload.year] = {};
-                        }
-                        if (students[j].attendance[payload.year][payload.month] === undefined) {
-                            students[j].attendance[payload.year][payload.month] = {};
-                        }
-
-                        students[j].attendance[payload.year][payload.month] = attendance[i].days;
-                        break;
-                    }
-                }
-            }
-
-            const updateSql = "UPDATE `groups` SET students = ? WHERE id = ?";
-            await pool.execute(updateSql, [JSON.stringify(payload.attendance), payload.groupId]);
-
-            console.log(logs(req).ok);
-
-            return res.status(200).json({ message: "attendance updated" });
-        }
-        else {
-            console.error(logs(req).err, "no attendance data");
-            return res.status(400).json({ message: "no attendance data" });
-        }
-    } catch (error) {
-        console.error(logs(req).err);
-
-        return res.status(500).json({ message: "server error " + error });
-    }
-});
-
 groupRouter.post('/save-attendance', async (req, res) => {
     const { records } = req.body;
     const { token } = req.headers;
@@ -563,7 +499,7 @@ groupRouter.delete("/drop-database", async (req, res) => {
 
     try {
         const pool = await connectToCloudSQL;
-        const user = await getUserFromToken(token, jwt, private, connection);
+        const user = await getUserFromToken(token, jwt, private);
 
         if (!user) {
             console.error(logs(req), " unauthorized");
@@ -728,5 +664,41 @@ groupRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
     }
 });
 
+groupRouter.get("/get-students", async (req, res) => {
+    const { token } = req.headers;
+
+    try {
+        const pool = await connectToCloudSQL;
+        const user = await getUserFromToken(token, jwt, private);
+
+        if (!user) {
+            console.error(logs(req).err, " unauthorized");
+        
+            return res.status(401).json({ message: "unauthorized" })
+        };
+
+        // 2. check teacher/admin
+        if (user.status !== "admin" && user.status !== "teacher") {
+            console.error(logs(req).err, " forbidden");
+
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const [ students ] = await pool.execute("SELECT * FROM `group_students`");
+
+        // 3. validate data
+        if (!students || students.length === 0) {
+            console.error(logs(req).err, " no students");
+        
+            return res.status(400).json({ message: "no students" });
+        }
+
+        return res.status(200).json({ message: "success", data: students });
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({ message: "server error" });
+    }
+});
 
 module.exports = groupRouter;
