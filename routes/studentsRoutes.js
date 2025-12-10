@@ -54,7 +54,7 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
         }
 
         const sql = `
-            INSERT INTO group_students 
+            INSERT INTO students 
             (english_first_name, english_last_name, korean_first_name, korean_last_name, phone_number, email, student_id, start_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
@@ -80,7 +80,7 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
     }
 });
 
-groupRouter.get("/get-students", async (req, res) => {
+studentsRouter.get("/get-students", async (req, res) => {
     const { token } = req.headers;
 
     try {
@@ -117,7 +117,7 @@ groupRouter.get("/get-students", async (req, res) => {
     }
 });
 
-groupRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
+studentsRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
     const groupId = req.params.groupId;
     const { year, month, group_name } = req.query;
     const monthNumber = parseInt(month, 10);
