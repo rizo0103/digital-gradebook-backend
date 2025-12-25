@@ -12,6 +12,57 @@ const upload = multer({
     limits: { fileSize: 500 * 1024 * 1024 } // 500 MB limit
 });
 
+studentsRouter.post("/create-student", async(req, res) => {
+    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, email, phone, groups } = req.body;
+    const { token } = req.headers;
+
+    if (!token) {
+        console.error(logs(req).err, " No token provided");
+
+        return res.status(401).json({ message: "no token provided" });
+    }
+
+    try {
+        const pool = await connectToCloudSQL;
+        const user = await getUserFromToken(token, jwt, private);
+
+        if (!user || user.status !== "admin") {
+            console.error(logs(req).err, " forbidden user");
+
+            return res.status(403).json({ message: "forbidden user" });
+        }
+
+        const [tables] = await pool.execute("SHOW TABLE LIKE 'students'");
+
+        if (tables.length === 0) {
+            await pool.execute(`
+                CREATE TABLE students (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name_tj VARCHAR(255),
+                    last_name_tj VARCHAR(255),
+                    name_en VARCHAR(255),
+                    last_name_en VARCHAR(255),
+                    name_kr VARCHAR(255),
+                    last_name_kr VARCHAR(255),
+                    phone VARCHAR(255),
+                    email VARCHAR(255),
+                    start_date DATE,
+                    end_date DATE NULL
+                )
+            `);
+        }
+
+        const sql = `
+            INSERT INTO students 
+            (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, start_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "SERVER ERROR" + error });
+    }
+});
+
 studentsRouter.post("/upload-students", upload.single("file"), async (req, res) => {
     try {
         const pool = await connectToCloudSQL;
@@ -40,13 +91,14 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
             await pool.execute(`
                 CREATE TABLE students (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    english_first_name VARCHAR(255),
-                    english_last_name VARCHAR(255),
-                    korean_first_name VARCHAR(255),
-                    korean_last_name VARCHAR(255),
-                    phone_number VARCHAR(255),
+                    name_tj VARCHAR(255),
+                    last_name_tj VARCHAR(255),
+                    name_en VARCHAR(255),
+                    last_name_en VARCHAR(255),
+                    name_kr VARCHAR(255),
+                    last_name_kr VARCHAR(255),
+                    phone VARCHAR(255),
                     email VARCHAR(255),
-                    student_id INT,
                     start_date DATE,
                     end_date DATE NULL
                 )
@@ -55,19 +107,20 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
 
         const sql = `
             INSERT INTO students 
-            (english_first_name, english_last_name, korean_first_name, korean_last_name, phone_number, email, student_id, start_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, start_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         for (const student of students[2].data) {
             await pool.execute(sql, [
+                student.name_tj,
+                student.last_name_tj,
                 student.name_en,
                 student.last_name_en,
                 student.name_kr,
                 student.last_name_kr,
                 student.phone,
                 student.email,
-                Number(student.id),
                 student.created_at.split(" ")[0], // date only
             ]);
         }

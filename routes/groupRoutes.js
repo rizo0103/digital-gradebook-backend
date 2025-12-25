@@ -45,7 +45,7 @@ groupRouter.get("/get-timeslots", async (req, res) => {
 });
 
 groupRouter.post("/create-group", async (req, res) => {
-    const { name, level, time, teacher_name, schedule } = req.body;
+    const { name, group_type, time, teacher_name, schedule } = req.body;
     const { token } = req.headers;
 
     if (!token) {
@@ -65,7 +65,7 @@ groupRouter.post("/create-group", async (req, res) => {
                 CREATE TABLE \`groups\` (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     name VARCHAR(255),
-                    level VARCHAR(255),
+                    group_type VARCHAR(255),
                     teacher_id INT,
                     teacher_name VARCHAR(255),
                     schedule VARCHAR(255),
@@ -84,13 +84,13 @@ groupRouter.post("/create-group", async (req, res) => {
 
         const sql = `
             INSERT INTO \`groups\` 
-            (name, level, time, teacher_id, teacher_name, schedule)
+            (name, group_type, time, teacher_id, teacher_name, schedule)
             VALUES (?, ?, ?, ?, ?, ?)
         `;
 
         const [result] = await pool.execute(sql, [
             name,
-            level,
+            group_type.toLowerCase(),
             time,
             teacher_id,
             teacherName,
