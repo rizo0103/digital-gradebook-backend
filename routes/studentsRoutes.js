@@ -13,12 +13,11 @@ const upload = multer({
 });
 
 studentsRouter.post("/create-student", async(req, res) => {
-    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, email, phone, groups } = req.body;
+    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, email, phone, groups, startDate } = req.body;
     const { token } = req.headers;
 
     if (!token) {
         console.error(logs(req).err, " No token provided");
-
         return res.status(401).json({ message: "no token provided" });
     }
 
@@ -28,63 +27,9 @@ studentsRouter.post("/create-student", async(req, res) => {
 
         if (!user || user.status !== "admin") {
             console.error(logs(req).err, " forbidden user");
-
             return res.status(403).json({ message: "forbidden user" });
         }
 
-        const [tables] = await pool.execute("SHOW TABLE LIKE 'students'");
-
-        if (tables.length === 0) {
-            await pool.execute(`
-                CREATE TABLE students (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    name_tj VARCHAR(255),
-                    last_name_tj VARCHAR(255),
-                    name_en VARCHAR(255),
-                    last_name_en VARCHAR(255),
-                    name_kr VARCHAR(255),
-                    last_name_kr VARCHAR(255),
-                    phone VARCHAR(255),
-                    email VARCHAR(255),
-                    start_date DATE,
-                    end_date DATE NULL
-                )
-            `);
-        }
-
-        const sql = `
-            INSERT INTO students 
-            (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, start_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({ error: "SERVER ERROR" + error });
-    }
-});
-
-studentsRouter.post("/upload-students", upload.single("file"), async (req, res) => {
-    try {
-        const pool = await connectToCloudSQL;
-        const jsonString = req.file.buffer.toString("utf8");
-        const students = JSON.parse(jsonString);
-        const { token } = req.headers;
-
-        if (!Array.isArray(students)) {
-            return res.status(400).json({ message: "Invalid JSON format" });
-        }
-
-        if (!token) {
-            return res.status(400).json({ message: "no token provided" });
-        }
-
-        // verify token
-        const user = await getUserFromToken(token, jwt, private);
-        if (!user || user.status !== "admin") {
-            return res.status(403).json({ message: "forbidden" });
-        }
-
-        // ensure table exists
         const [tables] = await pool.execute("SHOW TABLES LIKE 'students'");
 
         if (tables.length === 0) {
@@ -110,9 +55,127 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
             (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, start_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
+        
+        const [result] = await pool.execute(sql, [name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, startDate]);
 
-        for (const student of students[2].data) {
-            await pool.execute(sql, [
+        console.log(logs(req).ok, `Created student with id ${result.insertId}`);
+        return res.status(201).json({ message: "Student created", studentId: result.insertId });
+
+    } catch (error) {
+        console.error(logs(req).err, "SERVER ERROR", error);
+        return res.status(500).json({ error: "SERVER ERROR" + error });
+    }
+});
+
+studentsRouter.post("/upload-students", upload.single("file"), async (req, res) => {
+    try {
+        const pool = await connectToCloudSQL;
+        const jsonString = req.file.buffer.toString("utf8");
+        const studentsData = JSON.parse(jsonString);
+        const { token } = req.headers;
+
+        if (!token) {
+            console.error(logs(req).err, "No token provided");
+            return res.status(400).json({ message: "no token provided" });
+        }
+
+        const user = await getUserFromToken(token, jwt, private);
+        if (!user || user.status !== "admin") {
+            console.error(logs(req).err, `Forbidden: user ${user.username} is not an admin`);
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const getStudentsArray = (data) => {
+            if (Array.isArray(data)) {
+                if (data.length > 2 && data[2] && Array.isArray(data[2].data)) {
+                    return data[2].data;
+                }
+                return data;
+            }
+            if (data && Array.isArray(data.data)) {
+                return data.data;
+            }
+            return [];
+        };
+
+        const students = getStudentsArray(studentsData);
+
+        if (students.length === 0) {
+            console.error(logs(req).err, "No student data found in the uploaded file");
+            return res.status(400).json({ message: "No student data found in the uploaded file" });
+        }
+
+        const [tables] = await pool.execute("SHOW TABLES LIKE 'students'");
+        if (tables.length === 0) {
+            console.log(logs(req).info, "Creating 'students' table");
+            await pool.execute(`
+                CREATE TABLE students (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name_tj VARCHAR(255),
+                    last_name_tj VARCHAR(255),
+                    name_en VARCHAR(255),
+                    last_name_en VARCHAR(255),
+                    name_kr VARCHAR(255),
+                    last_name_kr VARCHAR(255),
+                    phone VARCHAR(255),
+                    email VARCHAR(255),
+                    start_date DATE,
+                    end_date DATE NULL
+                )
+            `);
+        }
+
+        const insertStudentSQL = `
+            INSERT INTO students
+            (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, start_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const findGroupSQL = "SELECT id FROM `groups` WHERE name = ?";
+        const [groupStudentsTable] = await pool.execute("SHOW TABLES LIKE 'group_students'");
+
+        if (groupStudentsTable.length === 0) {
+            console.log(logs(req).info, "Creating 'group_students' table");
+            await pool.execute(`
+                CREATE TABLE \`group_students\` (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    group_id INT NOT NULL,
+                    student_id INT NOT NULL,
+                    group_name VARCHAR(255),
+                    student_name_en VARCHAR(255),
+                    student_name_kr VARCHAR(255),
+                    student_name_tj VARCHAR(255)
+                )
+            `);
+        }
+        
+        const insertGroupStudentSQL = `
+            INSERT INTO group_students (group_id, student_id, group_name, student_name_en, student_name_kr, student_name_tj)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+
+        console.log(logs(req).info, `Processing ${students.length} students`);
+
+        for (const student of students) {
+            const [groupRows] = await pool.execute(findGroupSQL, [student.student_group]);
+
+            if (groupRows.length === 0) {
+                console.warn(logs(req).info, `Group not found: ${student.student_group}`);
+                continue;
+            }
+
+            const groupId = groupRows[0].id;
+            
+            let startDate = null;
+            try {
+                if (student.created_at) {
+                    startDate = new Date(student.created_at.split(" ")[0]).toISOString().slice(0, 10);
+                }
+            } catch (e) {
+                console.warn(logs(req).info, `Invalid date format for student ${student.name_en || ''}: ${student.created_at}`);
+            }
+
+            const [result] = await pool.execute(insertStudentSQL, [
                 student.name_tj,
                 student.last_name_tj,
                 student.name_en,
@@ -121,14 +184,25 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
                 student.last_name_kr,
                 student.phone,
                 student.email,
-                student.created_at.split(" ")[0], // date only
+                startDate,
+            ]);
+
+            const studentId = result.insertId;
+            await pool.execute(insertGroupStudentSQL, [
+                groupId, 
+                studentId, 
+                student.student_group, 
+                `${student.last_name_en} ${student.name_en}`, 
+                `${student.last_name_kr} ${student.name_kr}`, 
+                `${student.last_name_tj} ${student.name_tj}`
             ]);
         }
 
+        console.log(logs(req).ok, "Uploaded students successfully");
         return res.status(200).json({ message: "Students uploaded!" });
 
     } catch (error) {
-        console.error("Server Error:", error);
+        console.error(logs(req).err, "Server Error:", error);
         return res.status(500).json({ message: "server error " + error });
     }
 });
@@ -153,14 +227,16 @@ studentsRouter.get("/get-students", async (req, res) => {
             return res.status(403).json({ message: "forbidden" });
         }
 
-        const [ students ] = await pool.execute("SELECT * FROM `group_students`");
+        let [ students ] = await pool.execute("SHOW TABLES LIKE 'students'");
 
         // 3. validate data
-        if (!students || students.length === 0) {
+        if (students.length === 0) {
             console.error(logs(req).err, " no students");
         
             return res.status(400).json({ message: "no students" });
         }
+
+        students = await pool.execute("SELECT * FROM students");
 
         return res.status(200).json({ message: "success", data: students });
     } catch (error) {

@@ -6,60 +6,6 @@ const connectToCloudSQL = require('../db');
 
 const userRouter = express.Router();
 
-userRouter.post("/create-user", async(req, res) => {
-    const { username, password, fullname_korean, fullname_english, groups, status } = req.body;
-    const { token } = req.headers;
-
-    if (!username || !password || !fullname_korean || !fullname_english || !groups || !status) {
-        console.error(logs(req).err);
-        return res.status(400).json({ message: "missing fields" });
-    }
-
-    let english_first_name = fullname_english.split(" ")[0], english_last_name = fullname_english.split(" ")[1];
-    let korean_first_name = fullname_korean.split(" ")[0], korean_last_name = fullname_korean.split(" ")[1];
-
-    try {
-        const pool = await connectToCloudSQL;
-        // verify token
-        const user = await getUserFromToken(token, jwt, private);
-        if (!user) {
-            console.error(logs(req).err);
-            return res.status(401).json({ message: "unauthorized" });
-        }
-
-        // verify admin status
-        if (user.status !== "admin") {
-            console.error(logs(req).err);
-
-            return res.status(403).json({ message: "forbidden" });
-        }
-
-        // create user
-        const sql = "INSERT INTO users (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, groups, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-        
-        const [result] = await pool.execute(sql, [english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, JSON.stringify(groups), status]);
-
-        console.log(logs(req).ok);
-
-        if (result.affectedRows === 0) {
-            console.error(logs(req).err);
-            
-            return res.status(500).json({ message: "user creation failed" });
-        }
-
-        groups.forEach(async (group) => {
-            const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
-            const [resp] = await pool.execute(updateGroupSql, [`${korean_last_name} ${korean_first_name}`, group]);
-        });
-
-        return res.status(200).json({ message: "user created", data: result });
-    } catch (error) {
-        console.error(logs(req).err);
-
-        return res.status(500).json({ message: "server error " + error});
-    }
-});
-
 userRouter.get("/get-all-users", async (req, res) => {
     const { token } = req.headers;
 
@@ -155,39 +101,31 @@ userRouter.get("/get-user-data/:username", async (req, res) => {
 
 userRouter.put("/update-user/:username", async (req, res) => {
     const { username } = req.params;
-    const { new_username, new_password, new_korean_first_name, new_korean_last_name, new_english_first_name, new_english_last_name, new_status, new_email } = req.body;
+    const { new_username, new_password, new_name_tj, new_last_name_tj, new_name_kr, new_last_name_kr, new_name_en, new_last_name_en, new_status, new_email, new_phone } = req.body;
     const { token } = req.headers;
 
     try {
-        // verify token
         const pool = await connectToCloudSQL;
-        const requestingUser = await getUserFromToken(token, jwt, private, connection);
+        const requestingUser = await getUserFromToken(token, jwt, private);
         
         if (!requestingUser) {
-            console.error(logs(req).err);
+            console.error(logs(req).err, "unauthorized");
             return res.status(401).json({ message: "unauthorized" });
         }
-        // verify admin status
-
+        
         if (requestingUser.status !== "admin") {
-            console.error(logs(req).err);
+            console.error(logs(req).err, `user ${requestingUser.username} with status ${requestingUser.status} trying to update user, but not an admin`);
             return res.status(403).json({ message: "forbidden" });
         }
         
-        const sql = "UPDATE users SET english_first_name = ?, english_last_name = ?, korean_first_name = ?, korean_last_name = ?, username = ?, password = ?, status = ?, email = ? WHERE username = ?";
-        const [result] = await pool.execute(sql, [new_english_first_name, new_english_last_name, new_korean_first_name, new_korean_last_name, new_username, new_password, new_status, new_email, username]);
+        const sql = "UPDATE users SET username = ?, password = ?, name_tj = ?, last_name_tj = ?, name_kr = ?, last_name_kr = ?, name_en = ?, last_name_en = ?, status = ?, email = ?, phone = ? WHERE username = ?";
+        const [result] = await pool.execute(sql, [new_username, new_password, new_name_tj, new_last_name_tj, new_name_kr, new_last_name_kr, new_name_en, new_last_name_en, new_status, new_email, new_phone, username]);
 
-        console.log(logs(req).ok);
+        console.log(logs(req).info(`user ${requestingUser.username} updated user ${username}`));
 
-        // new_groups.forEach(async (group) => {
-        //     const updateGroupSql = "UPDATE groups SET teacher = ? WHERE name = ?";
-        //     const [resp] = await pool.execute(updateGroupSql, [`${last_name_korean} ${first_name_korean}`, group]);
-        // });
-
-        return res.status(200).json({ message: "user updated ", data: result });
+        return res.status(200).json({ message: "user updated", data: result });
     } catch (error) {
-        console.error(logs(req).err);
-
+        console.error(logs(req).err, "SERVER ERROR" + error);
         return res.status(500).json({ message: "server error " + error });
     }
 });

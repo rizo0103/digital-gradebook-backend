@@ -4,6 +4,7 @@ const logs = (req) => {
     return {
         ok: req.method + " " + req.protocol + "://" + req.ip + " " + req.path + " okay :)",
         err: req.method + " " + req.protocol + "://" + req.ip + " " + req.path + " not okay -_-",
+        info: (message) => req.method + " " + req.protocol + "://" + req.ip + " " + req.path + " " + message,
     }
 };
 

@@ -36,24 +36,26 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/register", async (req, res) => {
-    const { english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email, phone_number } = await req.body;
+    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, username, password, status, email, phone } = await req.body;
 
     try {
-        const pool = await connectToCloudSQL();
+        const pool = await connectToCloudSQL;
         const [table] = await pool.query("SHOW TABLES LIKE 'users'");
         if (!table.length) {
             const createTableSQL = `
                 CREATE TABLE users (
                     id INT AUTO_INCREMENT PRIMARY KEY,
-                    english_first_name VARCHAR(255),
-                    english_last_name VARCHAR(255),
-                    korean_first_name VARCHAR(255),
-                    korean_last_name VARCHAR(255),
+                    name_tj VARCHAR(255),
+                    last_name_tj VARCHAR(255),
+                    name_en VARCHAR(255),
+                    last_name_en VARCHAR(255),
+                    name_kr VARCHAR(255),
+                    last_name_kr VARCHAR(255),
                     username VARCHAR(255) UNIQUE,
                     password VARCHAR(255),
                     status VARCHAR(50),
                     email VARCHAR(255) UNIQUE,
-                    phone_number VARCHAR(255),
+                    phone VARCHAR(255),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             `;
@@ -62,20 +64,22 @@ authRouter.post("/register", async (req, res) => {
 
         const sql = `
             INSERT INTO users 
-            (english_first_name, english_last_name, korean_first_name, korean_last_name, username, password, status, email, phone_number) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, username, password, status, email, phone) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const [results] = await pool.execute(sql, [
-            english_first_name,
-            english_last_name,
-            korean_first_name,
-            korean_last_name,
+            name_tj,
+            last_name_tj,
+            name_en,
+            last_name_en,
+            name_kr,
+            last_name_kr,
             username,
             password,
             status,
             email,
-            phone_number,
+            phone,
         ]);
 
         console.log(logs(req).ok);
@@ -94,6 +98,5 @@ authRouter.post("/register", async (req, res) => {
     }
 
 });
-
 
 module.exports = authRouter;
