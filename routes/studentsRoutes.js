@@ -13,14 +13,14 @@ const upload = multer({
 });
 
 studentsRouter.post("/create-student", async(req, res) => {
-    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, email, phone, groups, startDate } = req.body;
+    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, email, phone, groups } = req.body;
     const { token } = req.headers;
 
     if (!token) {
         console.error(logs(req).err, " No token provided");
         return res.status(401).json({ message: "no token provided" });
     }
-
+    
     try {
         const pool = await connectToCloudSQL;
         const user = await getUserFromToken(token, jwt, private);
@@ -54,13 +54,51 @@ studentsRouter.post("/create-student", async(req, res) => {
             INSERT INTO students 
             (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, start_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
+        `, startDate = new Date().toISOString().slice(0, 10);
         
         const [result] = await pool.execute(sql, [name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, phone, email, startDate]);
 
-        console.log(logs(req).ok, `Created student with id ${result.insertId}`);
-        return res.status(201).json({ message: "Student created", studentId: result.insertId });
+        
+        const [groupStudentsTable] = await pool.execute("SHOW TABLES LIKE 'group_students'");
+        
+        if (groupStudentsTable.length === 0) {
+            await pool.execute(`
+                CREATE TABLE \`group_students\` (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    group_id INT NOT NULL,
+                    student_id INT NOT NULL,
+                    group_name VARCHAR(255),
+                    student_name_en VARCHAR(255),
+                    student_name_kr VARCHAR(255),
+                    student_name_tj VARCHAR(255)
+                )
+            `);
+        }
 
+        const insertGroupStudentSQL = `
+        INSERT INTO group_students (group_id, student_id, group_name, student_name_en, student_name_kr, student_name_tj)
+        VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        
+        for (const group of groups) {
+            const [group_result] = await pool.execute(insertGroupStudentSQL, [
+                group.id, 
+                result.insertId, 
+                group.name,
+                `${last_name_en} ${name_en}`, 
+                `${last_name_kr} ${name_kr}`,
+                `${last_name_tj} ${name_tj}`
+            ]);
+
+            
+            if (group_result.affectedRows === 0) {
+                console.error(logs(req).err, " Failed to create group student");
+            }
+        }
+
+        console.log(logs(req).ok, `Created student with id ${result.insertId}`);
+        
+        return res.status(201).json({ message: "Student created", studentId: result.insertId });
     } catch (error) {
         console.error(logs(req).err, "SERVER ERROR", error);
         return res.status(500).json({ error: "SERVER ERROR" + error });
@@ -236,7 +274,7 @@ studentsRouter.get("/get-students", async (req, res) => {
             return res.status(400).json({ message: "no students" });
         }
 
-        students = await pool.execute("SELECT * FROM students");
+        [students] = await pool.execute("SELECT * FROM students");
 
         return res.status(200).json({ message: "success", data: students });
     } catch (error) {
@@ -258,10 +296,10 @@ studentsRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
         const pool = await connectToCloudSQL;
         // 1. Get group students
         const [students] = await pool.execute(
-            `SELECT id, student_name_english, student_name_korean
+            `SELECT id, student_name_en, student_name_kr
              FROM group_students
              WHERE group_name = ?
-             ORDER BY student_name_english`,
+             ORDER BY student_name_en`,
             [group_name]
         );
 
@@ -302,7 +340,7 @@ studentsRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
 
         // 7. Rows for each student
         students.forEach(student => {
-            const rowData = [student.student_name_english];
+            const rowData = [student.student_name_en];
 
             // 1. Формируем данные строки
             sortedDates.forEach(date => {
@@ -364,6 +402,45 @@ studentsRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "server error" });
+    }
+});
+
+studentsRouter.get("/get-student-groups/:id", async (req, res) => {
+    const { token } = req.headers;
+    const { id } = req.params;
+
+    if (!token) {
+        console.error(logs(req).err, " No token provided");
+        return ;
+    }
+
+    try {
+        const user = await getUserFromToken(token, jwt, private);
+        const pool = await connectToCloudSQL;
+
+        if (!user) {
+            console.error(logs(req).err, " unauthorized");
+            return res.status(401).json({ message: "unauthorized" });
+        }
+
+        if (user.status !== "admin" && user.status !== "teacher") {
+            console.error(logs(req).err, " forbidden");
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const sql = `SELECT * FROM group_students WHERE student_id = ?`;
+        const [results] = await pool.execute(sql, [id]);
+
+        if (results.length === 0) {
+            console.error(logs(req).err, " no data found");
+            return res.status(404).json({ message: "no data found" });
+        }
+
+        console.log(logs(req).ok, " successfuly get data from `group_students`");
+        return res.status(200).json({ message: "success", data: results });
+    } catch (error) {
+        console.error(logs(req).err, " server error " + error);
+        return res.status(500).json({ message: "server error " + error });
     }
 });
 
