@@ -436,11 +436,112 @@ studentsRouter.get("/get-student-groups/:id", async (req, res) => {
             return res.status(404).json({ message: "no data found" });
         }
 
+        const group_type_sql = `SELECT group_type FROM \`groups\` WHERE id = ?`;
+        
+        const promises = results.map(async (result) => {
+            const [group_types] = await pool.execute(group_type_sql, [result.group_id]);
+            if (group_types.length > 0) {
+                result.group_type = group_types[0].group_type;
+            }
+            return result;
+        });
+
+        const data = await Promise.all(promises);
+        
         console.log(logs(req).ok, " successfuly get data from `group_students`");
-        return res.status(200).json({ message: "success", data: results });
+        return res.status(200).json({ message: "success", data: data});
     } catch (error) {
         console.error(logs(req).err, " server error " + error);
         return res.status(500).json({ message: "server error " + error });
+    }
+});
+
+studentsRouter.post("/update-student", async (req, res) => {
+    const { token } = req.headers;
+    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, groups, email, phone, id } = req.body;
+
+    try {
+        if (!token) {
+            console.error(logs(req).err, " no token provided");
+        }
+
+        const pool = await connectToCloudSQL;
+        const user = await getUserFromToken(token, jwt, private);
+
+        if (!user) {
+            console.error(logs(req).err, " unauthorized");
+            return res.status(401).json({ message: "unauthorized" });
+        }
+
+        if (user.status !== "teacher" && user.status !== "admin") {
+            console.error(logs(req).err, " forbidden");
+            return res.status(403).json({ message: "forbidden" });
+        }
+
+        const update_sql = `UPDATE students SET name_tj = ?, last_name_tj = ?, name_en = ?, last_name_en = ?, name_kr = ?, last_name_kr = ?, email = ?, phone = ? WHERE id = ?`;
+        const [result] = await pool.execute(update_sql, [name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, email, phone, id]);
+
+        if (result.affectedRows === 0) {
+            console.error(logs(req).err, " no data updated");
+            return res.status(404).json({ message: "no data updated" });
+        }
+
+        const get_student_groups_sql = `SELECT * FROM \`group_students\` WHERE student_id = ?`;
+        const [student_groups] = await pool.execute(get_student_groups_sql, [id]);
+
+        // delete group if groups are not in studenr_groups
+        const groupsToDelete = [];
+        for (let i = 0; i < student_groups.length; ++i) {
+            let flag = false;
+            for (let j = 0; j < groups.length; ++j) {
+                if (student_groups[i].group_id === groups[j].id) {
+                    flag = true;
+                    break;
+                }
+            }
+            if (!flag) {
+                groupsToDelete.push(student_groups[i].group_id);
+            }
+        }
+
+        if (groupsToDelete.length !== 0) {
+            const delete_student_groups_sql = `DELETE FROM \`group_students\` WHERE student_id = ? AND group_id = ?`;
+            
+            for (const group of groupsToDelete) {
+                await pool.execute(delete_student_groups_sql, [id, group]);
+            }
+            console.log(logs(req).ok, " successfully deleted student groups");
+        }
+
+        const insert_student_groups_sql = `INSERT INTO \`group_students\` (group_id, student_id, group_name, student_name_en, student_name_kr, student_name_tj) VALUES (?, ?, ?, ?, ?, ?)`;
+        const groupsToAdd = [];
+
+        for (let i = 0; i < groups.length; ++i) {
+            let flag = false;
+            for (let j = 0; j < student_groups.length; ++j) {
+                if (student_groups[j].group_id === groups[i].id) {
+                    flag = true;
+                    break;
+                }
+            }
+            if (!flag) {
+                groupsToAdd.push(groups[i]);
+            }
+        }
+
+        if (groupsToAdd.length !== 0) {
+            for (const group of groupsToAdd) {
+                await pool.execute(insert_student_groups_sql, [group.id, id, group.name, `${last_name_en} ${name_en}`, `${last_name_kr} ${name_kr}`, `${last_name_tj} ${name_tj}`]);
+            }
+            console.log(logs(req).ok, " successfully added student groups");
+        }
+
+        console.log(logs(req).ok, " successfully updated student");
+
+        return res.status(200).json({ message: "successfully updated student" });
+    } catch (error) {
+        console.error(logs(req).err, " server error " + error);
+        return res.status(500).json({ message: " server error" + error });
     }
 });
 
