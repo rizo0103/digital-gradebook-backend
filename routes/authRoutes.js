@@ -19,29 +19,28 @@ authRouter.post("/login", async (req, res) => {
         if (results.length) {
             const token = jwt.sign({ username, password }, private, { expiresIn: "12h" });
 
-            console.log(logs(req).ok);
+            console.log(logs(req).info(`User ${username} logged in successfully`));
 
             return res.status(200).json({ message: "success", token: token });
         } else {
-            console.error(logs(req).err, " not found");
-
+            console.error(logs(req).err, `User ${username} not found`);
             return res.status(404).json({ message: "user was not found..." });
         }
 
     } catch (error) {
-        console.error(logs(req).err);
-
+        console.error(logs(req).err, error);
         return res.status(500).json({ message: "server error" + error });
     }
 });
 
 authRouter.post("/register", async (req, res) => {
-    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, username, password, status, email, phone } = await req.body;
+    const { name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, username, password, status, email, phone } = req.body;
 
     try {
         const pool = await connectToCloudSQL;
         const [table] = await pool.query("SHOW TABLES LIKE 'users'");
         if (!table.length) {
+            console.log(logs(req).info("Creating 'users' table"));
             const createTableSQL = `
                 CREATE TABLE users (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -82,21 +81,17 @@ authRouter.post("/register", async (req, res) => {
             phone,
         ]);
 
-        console.log(logs(req).ok);
+        console.log(logs(req).info(`User ${username} registered successfully`));
 
         return res.status(200).json({
             message: "success",
             data: results,
         });
 
-
-
     } catch (err) {
-        console.error(logs(req).err);
-
+        console.error(logs(req).err, err);
         return res.status(500).json({ message: "server error " + err });
     }
-
 });
 
 module.exports = authRouter;

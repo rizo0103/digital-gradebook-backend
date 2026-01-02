@@ -197,12 +197,6 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
         for (const student of students) {
             const [groupRows] = await pool.execute(findGroupSQL, [student.student_group]);
 
-            if (groupRows.length === 0) {
-                console.warn(logs(req).info, `Group not found: ${student.student_group}`);
-                continue;
-            }
-
-            const groupId = groupRows[0].id;
             
             let startDate = null;
             try {
@@ -212,7 +206,7 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
             } catch (e) {
                 console.warn(logs(req).info, `Invalid date format for student ${student.name_en || ''}: ${student.created_at}`);
             }
-
+            
             const [result] = await pool.execute(insertStudentSQL, [
                 student.name_tj,
                 student.last_name_tj,
@@ -226,6 +220,12 @@ studentsRouter.post("/upload-students", upload.single("file"), async (req, res) 
             ]);
 
             const studentId = result.insertId;
+            if (groupRows.length === 0) {
+                console.warn(logs(req).info, `Group not found: ${student.student_group}`);
+                continue;
+            }
+            const groupId = groupRows[0].id;
+            
             await pool.execute(insertGroupStudentSQL, [
                 groupId, 
                 studentId, 
