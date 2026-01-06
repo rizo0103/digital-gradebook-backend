@@ -1,0 +1,32 @@
+{
+  "dependencies": {
+    "@google-cloud/cloud-sql-connector": "^1.8.4",
+    "cors": "^2.8.5",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "mysql2": "^3.15.1",
+    "nodemon": "^3.1.11"
+  },
+  "name": "electronic-gradebook-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rizo0103/digital-gradebook-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rizo0103/digital-gradebook-backend/issues"
+  },
+  "homepage": "https://github.com/rizo0103/digital-gradebook-backend#readme"
+}
