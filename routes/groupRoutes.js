@@ -81,7 +81,7 @@ groupRouter.get("/get-groups", async(req, res) => {
                 return res.status(401).json({ message: "unauthorized" });
             }
 
-            if (user.status !== "admin" && user.status !== "teacher") {
+            if (user.status !== "admin" && user.status !== "teacher" && user.status !== "guest") {
                 console.error(logs(req).err, " forbidden");
 
                 return res.status(403).json({ message: "forbidden" });
@@ -221,7 +221,7 @@ groupRouter.get("/get-group-data/:id", async (req, res) => {
             return res.status(401).json({ message: "unauthorized" });
         }
         
-        if (user.status !== "admin" && user.status !== "teacher") {
+        if (user.status !== "admin" && user.status !== "teacher" && user.status !== "guest") {
             console.error(logs(req).err, " forbidden");
             return res.status(403).json({ message: "forbidden" });
         }

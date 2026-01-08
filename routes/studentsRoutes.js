@@ -329,8 +329,8 @@ studentsRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
         // 5. Prepare Excel
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet("Attendance");
-        sheet.addRow([group_name], "x: absent, △: late, '': present");
-        sheet.addRow([months[month - 1]]);
+        sheet.addRow([group_name]);
+        sheet.addRow([year ,months[month - 1]]);
 
         // 6. Header row: Student + sorted dates
         const headerRow = ["Student / Day", ...sortedDates];
@@ -382,6 +382,9 @@ studentsRouter.get('/export-attendance-matrix/:groupId', async (req, res) => {
             });
         });
 
+        sheet.addRow(["Total Students: " + students.length]);
+        sheet.addRow(["x: absent, △: late, '': present" ]);
+        sheet.addRow(["Generated on: " + new Date().toLocaleString()]);
 
         // 8. Set headers for download
         res.setHeader(
