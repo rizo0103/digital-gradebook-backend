@@ -60,7 +60,7 @@ authRouter.post("/register", async (req, res) => {
             `;
             await pool.query(createTableSQL);
         }
-
+ 
         const sql = `
             INSERT INTO users 
             (name_tj, last_name_tj, name_en, last_name_en, name_kr, last_name_kr, username, password, status, email, phone) 
